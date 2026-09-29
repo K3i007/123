@@ -1,0 +1,48 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Domain", "src\Dealership.Domain\Dealership.Domain.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Application", "src\Dealership.Application\Dealership.Application.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Infrastructure", "src\Dealership.Infrastructure\Dealership.Infrastructure.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Api", "src\Dealership.Api\Dealership.Api.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Application.Tests", "tests\Dealership.Application.Tests\Dealership.Application.Tests.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000005}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dealership.Infrastructure.Tests", "tests\Dealership.Infrastructure.Tests\Dealership.Infrastructure.Tests.csproj", "{1A2E0B3C-4D5E-4F60-9001-000000000006}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1A2E0B3C-4D5E-4F60-9001-000000000001}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000001}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000003}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000003}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000004}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000006}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000006}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000001}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000001}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000002}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000002}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000003}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000003}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000004}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000004}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000005}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000005}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A2E0B3C-4D5E-4F60-9001-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

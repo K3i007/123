@@ -1,0 +1,11 @@
+.env
+.env.local
+*.env
+*.log
+*.binlog
+**/bin/
+**/obj/
+**/TestResults/
+**/node_modules/
+frontend/.next/
+frontend/coverage/

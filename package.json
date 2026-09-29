@@ -1,0 +1,6 @@
+{
+  "name": "dealership",
+  "private": true,
+  "scripts": { "install:frontend": "npm --prefix frontend install", "dev:frontend": "npm --prefix frontend run dev", "build:frontend": "npm --prefix frontend run build", "lint:frontend": "npm --prefix frontend run lint", "format:check": "npm --prefix frontend run format:check" }
+}
+
