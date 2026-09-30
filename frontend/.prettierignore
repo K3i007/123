@@ -1,7 +1,5 @@
-node_modules
-.next
-out
-dist
-build
-test-results
-package-lock.json
+app/api-types.ts
+openapi.json
+.next/
+test-results/
+playwright-report/

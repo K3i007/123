@@ -5,6 +5,10 @@ using Dealership.Domain;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using System.Reflection;
 using Xunit;
 
 namespace Dealership.Infrastructure.Tests;
@@ -19,6 +23,7 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
     private Guid _makeId;
     private Guid _publishedId;
     private Guid _draftId;
+    private Guid _withdrawnId;
     private string _fieldKey = string.Empty;
     private string _privateFieldKey = string.Empty;
 
@@ -42,9 +47,11 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
         var secondPublished = CreateVehicle(make, model, branch, user, 2023, 32000, 400000m, "Delantera", _fieldKey, "no");
         Publish(secondPublished, user.Id);
         var draft = CreateVehicle(make, model, branch, user, 2024, 1000, 600000m, "AWD", _fieldKey, "yes");
-        db.AddRange(published, secondPublished, draft);
+        var withdrawn = CreateVehicle(make, model, branch, user, 2021, 44000, 350000m, "Delantera", _fieldKey, "no");
+        withdrawn.TransitionTo(VehicleStatus.Withdrawn, "HTTP test", user.Id);
+        db.AddRange(published, secondPublished, draft, withdrawn);
         await db.SaveChangesAsync();
-        _makeId = make.Id; _publishedId = published.Id; _draftId = draft.Id;
+        _makeId = make.Id; _publishedId = published.Id; _draftId = draft.Id; _withdrawnId = withdrawn.Id;
     }
 
     public async Task DisposeAsync()
@@ -108,6 +115,69 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
         var response = await _client.GetAsync($"/api/v1/public/vehicles{query}");
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Published_at_migration_backfills_existing_published_vehicles()
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>();
+        var migration = new Dealership.Infrastructure.Migrations.AddVehiclePublishedAt();
+        var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
+        typeof(Dealership.Infrastructure.Migrations.AddVehiclePublishedAt)
+            .GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(migration, [builder]);
+        var backfill = Assert.Single(builder.Operations.OfType<SqlOperation>());
+        Assert.Contains("UPDATE \"Vehicles\" SET \"PublishedAt\" = \"CreatedAt\" WHERE \"Status\" = 5", backfill.Sql, StringComparison.Ordinal);
+
+        var missingPublicationDates = await db.Vehicles.CountAsync(x => x.Status == VehicleStatus.Published && x.PublishedAt == null);
+        Assert.Equal(0, missingPublicationDates);
+    }
+
+    [Fact]
+    public async Task Public_endpoints_smoke_test_against_postgresql_and_detail_hides_unpublished_inventory()
+    {
+        var endpoints = new[]
+        {
+            "/api/v1/public/vehicles?pageSize=12",
+            "/api/v1/public/vehicles/filters",
+            "/api/v1/public/vehicles/featured",
+            "/api/v1/public/vehicles/recent",
+            $"/api/v1/public/vehicles/{_publishedId}",
+            $"/api/v1/public/vehicles/{_publishedId}/similar",
+            "/api/v1/public/branches"
+        };
+        foreach (var endpoint in endpoints)
+        {
+            var response = await _client.GetAsync(endpoint);
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        }
+
+        var publishedDetail = await _client.GetStringAsync($"/api/v1/public/vehicles/{_publishedId}");
+        Assert.Contains("publishedOn", publishedDetail, StringComparison.Ordinal);
+        Assert.DoesNotContain("vin", publishedDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("plate", publishedDetail, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("history", publishedDetail, StringComparison.OrdinalIgnoreCase);
+
+        var similar = await _client.GetFromJsonAsync<JsonElement>($"/api/v1/public/vehicles/{_publishedId}/similar");
+        Assert.InRange(similar.GetArrayLength(), 0, 6);
+        Assert.DoesNotContain(similar.EnumerateArray(), item => item.GetProperty("id").GetGuid() == _publishedId);
+
+        var hiddenResponses = await Task.WhenAll(new[]
+        {
+            _client.GetAsync($"/api/v1/public/vehicles/{_draftId}"),
+            _client.GetAsync($"/api/v1/public/vehicles/{_withdrawnId}"),
+            _client.GetAsync($"/api/v1/public/vehicles/{Guid.NewGuid()}")
+        });
+        var bodies = new List<string>();
+        foreach (var response in hiddenResponses)
+        {
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("public, max-age=45", response.Headers.CacheControl?.ToString());
+            bodies.Add(await response.Content.ReadAsStringAsync());
+        }
+        Assert.All(bodies, body => Assert.Equal(bodies[0], body));
     }
 
     private static Vehicle CreateVehicle(Make make, Model model, Branch branch, User user, int year, int mileage, decimal price, string drivetrain, string fieldKey, string filterValue)

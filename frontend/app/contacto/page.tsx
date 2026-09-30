@@ -13,9 +13,8 @@ async function getBranches(): Promise<
     id: string;
     name: string;
     address: string;
-    phones: string;
-    hours: string;
-    managerName?: string;
+    phones: string[];
+    hours: Record<string, string>;
   }[]
 > {
   try {
@@ -47,22 +46,9 @@ export default async function ContactoPage() {
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {branches.map((b) => {
-          let parsedPhones: string[] = [];
-          try {
-            parsedPhones = JSON.parse(b.phones);
-          } catch {
-            parsedPhones = [b.phones];
-          }
-
-          let parsedHours = "";
-          try {
-            const h = JSON.parse(b.hours);
-            parsedHours = Object.entries(h)
-              .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
-              .join(" | ");
-          } catch {
-            parsedHours = b.hours;
-          }
+          const parsedHours = Object.entries(b.hours)
+            .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
+            .join(" | ");
 
           return (
             <div
@@ -112,7 +98,7 @@ export default async function ContactoPage() {
                         d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
                       />
                     </svg>
-                    <span>{parsedPhones.join(", ") || "(55) 5550-0100"}</span>
+                    <span>{b.phones.join(", ") || "(55) 5550-0100"}</span>
                   </p>
 
                   <p className="flex items-center gap-2">
@@ -135,12 +121,6 @@ export default async function ContactoPage() {
                   </p>
                 </div>
               </div>
-
-              {b.managerName && (
-                <div className="mt-6 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                  Gerente de sucursal: <strong className="text-slate-700">{b.managerName}</strong>
-                </div>
-              )}
             </div>
           );
         })}

@@ -22,7 +22,13 @@ export interface PublicVehicleItem {
   createdAt: string;
 }
 
-export function VehicleCard({ vehicle }: { vehicle: PublicVehicleItem }) {
+export function VehicleCard({
+  vehicle,
+  returnTo,
+}: {
+  vehicle: PublicVehicleItem;
+  returnTo?: string;
+}) {
   const title = `${vehicle.make} ${vehicle.model} ${vehicle.variant ? vehicle.variant : ""}`.trim();
   const formattedPrice = new Intl.NumberFormat("es-MX", {
     style: "currency",
@@ -32,13 +38,16 @@ export function VehicleCard({ vehicle }: { vehicle: PublicVehicleItem }) {
 
   const formattedMileage = new Intl.NumberFormat("es-MX").format(vehicle.mileage);
 
+  const detailHref = returnTo
+    ? `/vehiculos/${vehicle.id}?from=${encodeURIComponent(returnTo)}`
+    : `/vehiculos/${vehicle.id}`;
   return (
     <article
       data-testid="vehicle-card"
       className="group flex flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
     >
       <Link
-        href={`/vehiculos/${vehicle.id}`}
+        href={detailHref}
         className="relative block overflow-hidden focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
         aria-label={`Ver detalle de ${title}, año ${vehicle.year}, precio ${formattedPrice}`}
       >
@@ -62,7 +71,7 @@ export function VehicleCard({ vehicle }: { vehicle: PublicVehicleItem }) {
             </span>
             <h3 className="mt-0.5 line-clamp-1 text-lg font-bold text-slate-900">
               <Link
-                href={`/vehiculos/${vehicle.id}`}
+                href={detailHref}
                 className="hover:text-brand transition-colors focus:outline-none focus:underline"
               >
                 {title}
@@ -127,7 +136,7 @@ export function VehicleCard({ vehicle }: { vehicle: PublicVehicleItem }) {
 
         <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
           <div>
-            <span className="text-[10px] uppercase font-semibold text-slate-400 block">
+            <span className="text-[10px] uppercase font-semibold text-slate-600 block">
               Precio al contado
             </span>
             <span className="text-xl font-extrabold text-slate-900 tracking-tight">
@@ -135,7 +144,7 @@ export function VehicleCard({ vehicle }: { vehicle: PublicVehicleItem }) {
             </span>
           </div>
           <Link
-            href={`/vehiculos/${vehicle.id}`}
+            href={detailHref}
             className="rounded-lg bg-accent-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent-700 focus:outline-none focus:ring-2 focus:ring-accent-600 focus:ring-offset-2 transition-colors"
           >
             Ver auto

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
+import type { components } from "../app/api-types";
 
-const mockFilters = {
+const mockFilters: components["schemas"]["PublicFilterOptionsDto"] = {
   makes: [
     {
       id: "make-bmw-1",
@@ -43,7 +44,9 @@ const mockFilters = {
   conditions: ["New", "Used"],
 };
 
-const mockVehicles = Array.from({ length: 12 }).map((_, i) => ({
+const mockVehicles: components["schemas"]["PublicVehicleListItemDto"][] = Array.from({
+  length: 12,
+}).map((_, i) => ({
   id: `10000000-0000-0000-0000-0000000000${(i + 1).toString().padStart(2, "0")}`,
   make: i % 2 === 0 ? "BMW" : "Toyota",
   model: i % 2 === 0 ? "Serie 3" : "Corolla",
@@ -142,13 +145,16 @@ test.describe("Public Catalog E2E & Responsiveness", () => {
     // Verify cards contain BMW
     await expect(page.locator('[data-testid="vehicle-card"]').first()).toContainText("BMW");
 
-    // Select Toyota in make dropdown
+    // The first render is SSR against the actual API, so use the typed option it returned.
     const makeSelect = page.locator("#filter-make");
-    await makeSelect.selectOption("make-toyota-2");
+    const toyotaOption = makeSelect.locator("option", { hasText: "Toyota" });
+    const toyotaId = await toyotaOption.getAttribute("value");
+    expect(toyotaId).toBeTruthy();
+    await makeSelect.selectOption(toyotaId!);
     await page.waitForTimeout(300);
 
     // Verify URL reflects makeId
-    await expect(page).toHaveURL(/makeId=make-toyota-2/);
+    await expect(page).toHaveURL(new RegExp(`makeId=${toyotaId}`));
 
     // Click "Limpiar filtros" in the sidebar
     const clearBtn = page.getByRole("button", { name: "Limpiar filtros" }).first();
@@ -186,20 +192,22 @@ test.describe("Public Catalog E2E & Responsiveness", () => {
   });
 
   test("URL persistence: query params restored on reload", async ({ page }) => {
-    await page.goto("/catalogo?q=toyota&makeId=make-toyota-2");
+    await page.goto("/catalogo?q=toyota");
 
     const searchInput = page.locator("#catalog-search");
     await expect(searchInput).toHaveValue("toyota");
 
     const makeSelect = page.locator("#filter-make");
-    await expect(makeSelect.locator('option[value="make-toyota-2"]')).toBeAttached();
-    await expect(makeSelect).toHaveValue("make-toyota-2");
+    const toyotaOption = makeSelect.locator("option", { hasText: "Toyota" });
+    const toyotaId = await toyotaOption.getAttribute("value");
+    expect(toyotaId).toBeTruthy();
+    await makeSelect.selectOption(toyotaId!);
+    await expect(makeSelect).toHaveValue(toyotaId!);
 
     // Reload page
     await page.reload();
     await expect(searchInput).toHaveValue("toyota");
-    await expect(makeSelect.locator('option[value="make-toyota-2"]')).toBeAttached();
-    await expect(makeSelect).toHaveValue("make-toyota-2");
+    await expect(makeSelect).toHaveValue(toyotaId!);
   });
 
   test("Responsive grid columns and sticky filter panel at 1024px, 1300px, and 1600px", async ({

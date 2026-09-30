@@ -39,6 +39,7 @@ public sealed class Vehicle : IAuditableEntity
     public string? Vin { get; private set; } public string? Plate { get; private set; } public string? Color { get; set; }
     public string? Transmission { get; set; } public string? Fuel { get; set; } public string? Drivetrain { get; set; } public string? BodyStyle { get; set; }
     public string CustomFields { get; set; } = "{}"; public VehicleStatus Status { get; private set; } = VehicleStatus.Draft; public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? PublishedAt { get; private set; }
     public Guid CreatedById { get; set; } public bool IsDeleted { get; set; } public uint Version { get; private set; }
     public ICollection<VehicleEquipment> Equipment { get; } = new List<VehicleEquipment>(); public ICollection<VehicleStatusHistory> StatusHistory { get; } = new List<VehicleStatusHistory>(); public ICollection<VehiclePriceHistory> PriceHistory { get; } = new List<VehiclePriceHistory>();
     public void SetIdentifiers(string? vin, string? plate) { Vin = Normalize(vin); Plate = Normalize(plate); }
@@ -48,7 +49,9 @@ public sealed class Vehicle : IAuditableEntity
         if (string.IsNullOrWhiteSpace(reason)) throw new DomainRuleException("El motivo es obligatorio.");
         if (!VehicleStateMachine.CanTransition(Status, next)) throw new DomainRuleException($"No se puede cambiar de {Status} a {next}.");
         if (next == VehicleStatus.Published && !PublicationRequirements.Evaluate(this).All(x => x.IsSatisfied)) throw new DomainRuleException("El vehículo no cumple los requisitos para publicarse.");
-        StatusHistory.Add(new VehicleStatusHistory { VehicleId = Id, FromStatus = Status, ToStatus = next, Reason = reason.Trim(), ChangedById = actorId, ManualOverride = manualOverride }); Status = next;
+        StatusHistory.Add(new VehicleStatusHistory { VehicleId = Id, FromStatus = Status, ToStatus = next, Reason = reason.Trim(), ChangedById = actorId, ManualOverride = manualOverride });
+        if (next == VehicleStatus.Published) PublishedAt ??= DateTimeOffset.UtcNow;
+        Status = next;
     }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 }

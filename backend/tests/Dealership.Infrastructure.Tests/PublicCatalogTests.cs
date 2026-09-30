@@ -68,6 +68,7 @@ public sealed class PublicCatalogTests
         Assert.Equal(1, pagedResult.Total);
         var item = Assert.Single(pagedResult.Items);
         Assert.Equal(published.Id, item.Id);
+        Assert.NotNull(published.PublishedAt);
     }
 
     [Fact]
@@ -88,10 +89,11 @@ public sealed class PublicCatalogTests
         };
 
         var actionResult = await controller.GetVehicleById(draft.Id, CancellationToken.None);
-        Assert.IsType<NotFoundObjectResult>(actionResult.Result);
+        var draftNotFound = Assert.IsType<NotFoundObjectResult>(actionResult.Result);
 
         var nonExistentResult = await controller.GetVehicleById(Guid.NewGuid(), CancellationToken.None);
-        Assert.IsType<NotFoundObjectResult>(nonExistentResult.Result);
+        var missingNotFound = Assert.IsType<NotFoundObjectResult>(nonExistentResult.Result);
+        Assert.Equal(JsonSerializer.Serialize(draftNotFound.Value), JsonSerializer.Serialize(missingNotFound.Value));
     }
 
     [Fact]
@@ -105,7 +107,8 @@ public sealed class PublicCatalogTests
         var detailItem = new PublicVehicleDetailDto(
             Guid.NewGuid(), "Toyota", "Corolla", "SE", 2023, 15000, 380000m, "MXN",
             VehicleCondition.Used, "Rojo", "Automática", "Gasolina", "Delantera", "Sedán",
-            "Centro", Guid.NewGuid(), "{\"doors\":4}", null, DateTimeOffset.UtcNow);
+            new PublicVehicleBranchDto("Centro", "Dirección", ["5550300"], new Dictionary<string, string>()),
+            ["Aire acondicionado"], "{\"doors\":4}", DateOnly.FromDateTime(DateTime.UtcNow), []);
 
         var listJson = JsonSerializer.Serialize(listItem);
         var detailJson = JsonSerializer.Serialize(detailItem);

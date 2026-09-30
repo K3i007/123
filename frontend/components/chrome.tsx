@@ -340,9 +340,9 @@ export function PublicFooter() {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-white">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-white">
               Navegación
-            </h4>
+            </h2>
             <ul className="mt-3 space-y-2 text-sm text-slate-400">
               <li>
                 <Link href="/catalogo" className="hover:text-white transition-colors">
@@ -368,9 +368,9 @@ export function PublicFooter() {
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-white">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-white">
               Sucursales
-            </h4>
+            </h2>
             <ul className="mt-3 space-y-2 text-sm text-slate-400">
               <li>
                 <span className="text-white font-medium">Centro:</span> Av. Principal 100
@@ -382,28 +382,28 @@ export function PublicFooter() {
                 <span className="text-white font-medium">Aeropuerto:</span> Carretera Aeropuerto 55
               </li>
               <li>
-                <span className="text-slate-500 text-xs">Lunes a Domingo · Atención integral</span>
+                <span className="text-slate-400 text-xs">Lunes a Domingo · Atención integral</span>
               </li>
             </ul>
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold uppercase tracking-wider text-white">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-white">
               Contacto y Soporte
-            </h4>
+            </h2>
             <ul className="mt-3 space-y-2 text-sm text-slate-400">
               <li className="flex items-center gap-2">
                 <span>Teléfono: (55) 5550-0100</span>
               </li>
               <li>Correo: contacto@concesionaria.local</li>
-              <li className="pt-2 text-xs text-slate-500">
+              <li className="pt-2 text-xs text-slate-400">
                 Garantía mecánica, inspección certificada y financiamiento pre-aprobado.
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-12 border-t border-slate-800 pt-6 text-center text-xs text-slate-500">
+        <div className="mt-12 border-t border-slate-800 pt-6 text-center text-xs text-slate-400">
           <p>
             © {new Date().getFullYear()} Concesionaria Auto Premier. Todos los derechos reservados.
           </p>

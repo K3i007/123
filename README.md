@@ -14,7 +14,9 @@ Base de la plataforma de concesionaria. La Fase 0 entrega autenticación, autori
 2. Ejecuta `npm --prefix frontend install`.
 3. En PowerShell ejecuta `./scripts/start.ps1`.
 
-El script inicia PostgreSQL, API en `http://localhost:5080` (Swagger en `/swagger`) y frontend en `http://localhost:3000`. La API aplica la migración y crea el administrador solo en Development. Usa `SeedAdmin__Email` y `SeedAdmin__Password` de `.env` para iniciar sesión. El panel protegido está en `/admin`; la acción de semilla genera registros de auditoría que se consultan en `GET /api/v1/admin/audit` como administrador.
+El script inicia PostgreSQL, API en `http://localhost:5080` (Swagger en `/swagger`) y frontend en `http://localhost:3000`. La API aplica la migración y crea el administrador solo en Development. Usa `SeedAdmin__Email` y `SeedAdmin__Password` de `.env` para iniciar sesión. El panel protegido está en `/admin`; la acción de semilla genera registros de auditoría que se consultan en `GET /api/v1/admin/audit` como administrador. Docker Compose fue verificado con Docker Desktop durante la Fase 2.
+
+Docker Compose sigue **sin verificarse** en este equipo: aunque Docker Desktop está iniciado, `docker version` agotó el tiempo de espera al contactar el daemon el 30 de septiembre de 2026. Cuando el daemon responda, ejecuta `docker compose up -d` y `docker compose ps`; PostgreSQL quedará disponible en el puerto configurado por `POSTGRES_PORT` (por defecto `5433`). En un despliegue tras proxy inverso, configura únicamente sus IP en `ForwardedHeaders__KnownProxies__0`, etc.; la API no confía en cabeceras reenviadas de clientes directos.
 
 ## Verificación y Scripts de Prueba
 

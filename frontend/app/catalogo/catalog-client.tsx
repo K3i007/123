@@ -238,7 +238,11 @@ export function CatalogClient({
                 className="grid grid-cols-1 gap-6 lg:grid-cols-2 catalog:grid-cols-3 wide:grid-cols-4"
               >
                 {data.items.map((vehicle) => (
-                  <VehicleCard key={vehicle.id} vehicle={vehicle} />
+                  <VehicleCard
+                    key={vehicle.id}
+                    vehicle={vehicle}
+                    returnTo={`/catalogo${currentQuery ? `?${currentQuery}` : ""}`}
+                  />
                 ))}
               </div>
               {pages > 1 && (

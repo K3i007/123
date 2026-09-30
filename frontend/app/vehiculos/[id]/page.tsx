@@ -1,10 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+import { cache } from "react";
 import { notFound } from "next/navigation";
-import { VehiclePlaceholder } from "../../../components/vehicle-placeholder";
+import { VehicleActions } from "../../../components/vehicle-actions";
+import { VehicleGallery } from "../../../components/vehicle-gallery";
+import { VehicleCard, type PublicVehicleItem } from "../../../components/vehicle-card";
+import {
+  parsePublicCustomFields,
+  safeJsonLd,
+  sanitizeCatalogReturn,
+  telephoneHref,
+} from "../../../lib/vehicle-detail";
 
 const backend = process.env.BACKEND_URL ?? "http://localhost:5080";
-
-interface PublicVehicleDetail {
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+interface VehicleDetail {
   id: string;
   make: string;
   model: string;
@@ -19,139 +29,201 @@ interface PublicVehicleDetail {
   fuel: string | null;
   drivetrain: string | null;
   bodyStyle: string | null;
-  branch: string;
-  branchId: string;
+  branch: { name: string; address: string; phones: string[]; hours: Record<string, string> };
+  equipment: string[];
   customFields: string;
-  imageUrl: string | null;
-  createdAt: string;
+  publishedOn: string | null;
+  images: { url: string; alt: string; position: number }[];
 }
-
-async function getVehicle(id: string): Promise<PublicVehicleDetail | null> {
+const getVehicle = cache(async (id: string): Promise<VehicleDetail | null> => {
   try {
-    const res = await fetch(`${backend}/api/v1/public/vehicles/${id}`, {
-      cache: "no-store",
+    const response = await fetch(`${backend}/api/v1/public/vehicles/${id}`, {
+      next: { revalidate: 60 },
     });
-    if (!res.ok) return null;
-    return await res.json();
+    return response.ok ? ((await response.json()) as VehicleDetail) : null;
   } catch {
     return null;
   }
+});
+const getSimilar = cache(async (id: string): Promise<PublicVehicleItem[]> => {
+  try {
+    const response = await fetch(`${backend}/api/v1/public/vehicles/${id}/similar`, {
+      next: { revalidate: 60 },
+    });
+    return response.ok ? ((await response.json()) as PublicVehicleItem[]) : [];
+  } catch {
+    return [];
+  }
+});
+const titleFor = (vehicle: VehicleDetail) =>
+  `${vehicle.make} ${vehicle.model} ${vehicle.variant ?? ""}`.trim();
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const vehicle = await getVehicle((await params).id);
+  if (!vehicle) return { title: "Vehículo no disponible" };
+  const title = titleFor(vehicle);
+  const canonical = `${siteUrl}/vehiculos/${vehicle.id}`;
+  return {
+    title,
+    description: `${title}, ${vehicle.year}. Disponible en ${vehicle.branch.name}.`,
+    alternates: { canonical },
+    openGraph: {
+      title,
+      description: `${title}, ${vehicle.year}`,
+      url: canonical,
+      images: [
+        {
+          url: new URL(vehicle.images[0]?.url ?? "/vehicle-placeholder.png", siteUrl).toString(),
+          width: 1200,
+          height: 630,
+          alt: `Imagen de ${title}`,
+        },
+      ],
+    },
+  };
 }
 
-export default async function VehiculoDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function VehiculoDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const { id } = await params;
   const vehicle = await getVehicle(id);
-
-  if (!vehicle) {
-    notFound();
-  }
-
-  const title = `${vehicle.make} ${vehicle.model} ${vehicle.variant || ""}`.trim();
-  const formattedPrice = new Intl.NumberFormat("es-MX", {
+  if (!vehicle) notFound();
+  const origin = sanitizeCatalogReturn((await searchParams).from);
+  const title = titleFor(vehicle);
+  const similar = await getSimilar(id);
+  const price = new Intl.NumberFormat("es-MX", {
     style: "currency",
-    currency: vehicle.currency || "MXN",
+    currency: vehicle.currency,
     maximumFractionDigits: 0,
   }).format(vehicle.price);
-
-  const formattedMileage = new Intl.NumberFormat("es-MX").format(vehicle.mileage);
-
+  const customFields = Object.entries(parsePublicCustomFields(vehicle.customFields));
+  const jsonLd = safeJsonLd({
+    "@context": "https://schema.org",
+    "@type": "Car",
+    name: title,
+    vehicleModelDate: vehicle.year,
+    mileageFromOdometer: { "@type": "QuantitativeValue", value: vehicle.mileage, unitCode: "KMT" },
+    offers: {
+      "@type": "Offer",
+      price: vehicle.price,
+      priceCurrency: vehicle.currency,
+      availability: "https://schema.org/InStock",
+      url: `${siteUrl}/vehiculos/${vehicle.id}`,
+    },
+  });
   return (
-    <div className="mx-auto max-w-4xl py-6 space-y-8">
-      {/* Breadcrumb / Return */}
-      <nav aria-label="Miga de pan" className="text-xs text-slate-500 flex items-center gap-2">
-        <Link href="/" className="hover:underline">
-          Inicio
-        </Link>
+    <div className="mx-auto max-w-6xl space-y-8 py-6">
+      <nav aria-label="Miga de pan" className="flex flex-wrap gap-2 text-sm text-slate-600">
+        <Link href="/">Inicio</Link>
         <span>/</span>
-        <Link href="/catalogo" className="hover:underline">
-          Catálogo
-        </Link>
+        <Link href={origin}>Catálogo</Link>
         <span>/</span>
-        <span className="text-slate-900 font-medium truncate">{title}</span>
+        <span>{vehicle.make}</span>
+        <span>/</span>
+        <span>{vehicle.model}</span>
       </nav>
-
-      {/* Vehicle Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <span className="inline-block rounded-full bg-slate-900 px-3 py-0.5 text-xs font-semibold text-white">
-            {vehicle.condition === "New" ? "Vehículo Nuevo" : "Seminuevo Certificado"}
-          </span>
-          <h1 className="mt-2 text-2xl font-black text-slate-900 sm:text-4xl">{title}</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Año {vehicle.year} • {vehicle.bodyStyle || "Sedán"} • Sucursal {vehicle.branch}
+          <p className="text-sm font-semibold text-brand">Disponible</p>
+          <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">{title}</h1>
+          <p className="mt-1 text-slate-600">
+            {vehicle.year} · {new Intl.NumberFormat("es-MX").format(vehicle.mileage)} km ·{" "}
+            {vehicle.branch.name}
           </p>
         </div>
-        <div>
-          <span className="text-xs uppercase font-semibold text-slate-400 block">
-            Precio al contado
-          </span>
-          <span className="text-3xl font-black text-slate-900 tracking-tight">
-            {formattedPrice}
-          </span>
+        <p className="text-3xl font-bold text-slate-900">{price}</p>
+      </div>
+      <VehicleGallery title={title} images={vehicle.images} />
+      <VehicleActions />
+      <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-8">
+          <section>
+            <h2 className="text-xl font-bold">Especificaciones</h2>
+            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4 border-y border-slate-200 py-5 text-sm sm:grid-cols-3">
+              {[
+                ["Transmisión", vehicle.transmission],
+                ["Combustible", vehicle.fuel],
+                ["Tracción", vehicle.drivetrain],
+                ["Carrocería", vehicle.bodyStyle],
+                ["Color", vehicle.color],
+                ["Condición", vehicle.condition === "New" ? "Nuevo" : "Seminuevo"],
+                ...customFields.map(([key, value]) => [key, String(value)]),
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-slate-600">{label}</dt>
+                  <dd className="font-semibold text-slate-900">{value || "No especificado"}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+          <section>
+            <h2 className="text-xl font-bold">Equipamiento</h2>
+            <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+              {vehicle.equipment.length ? (
+                vehicle.equipment.map((item) => (
+                  <li key={item} className="border-b border-slate-200 py-2">
+                    {item}
+                  </li>
+                ))
+              ) : (
+                <li className="text-slate-600">Equipamiento por confirmar.</li>
+              )}
+            </ul>
+          </section>
+          <section className="border-y border-slate-200 py-5">
+            <h2 className="text-xl font-bold">Inspección y servicios</h2>
+            <p className="mt-2 text-sm text-slate-600">Información disponible próximamente.</p>
+          </section>
+          {similar.length > 0 && (
+            <section>
+              <h2 className="text-xl font-bold">Vehículos similares</h2>
+              <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {similar.map((item) => (
+                  <VehicleCard key={item.id} vehicle={item} returnTo={origin} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
-      </div>
-
-      {/* Media Placeholder */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 shadow-sm">
-        <VehiclePlaceholder alt={`Fotografía provisional de ${title}`} className="max-h-[420px]" />
-      </div>
-
-      {/* Specifications Grid */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-3">
-          Ficha Técnica Básica
-        </h2>
-        <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 text-sm">
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Kilometraje</dt>
-            <dd className="mt-1 font-bold text-slate-900">{formattedMileage} km</dd>
+        <aside className="h-fit border border-slate-200 bg-white p-5 lg:sticky lg:top-20">
+          <h2 className="text-lg font-bold">Sucursal {vehicle.branch.name}</h2>
+          <p className="mt-2 text-sm text-slate-600">{vehicle.branch.address}</p>
+          <div className="mt-4 space-y-2 text-sm">
+            {vehicle.branch.phones.map((phone) => (
+              <a className="block text-brand underline" key={phone} href={telephoneHref(phone)}>
+                {phone}
+              </a>
+            ))}
           </div>
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Transmisión</dt>
-            <dd className="mt-1 font-bold text-slate-900">
-              {vehicle.transmission || "No especificada"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Combustible</dt>
-            <dd className="mt-1 font-bold text-slate-900">{vehicle.fuel || "Gasolina"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Tracción</dt>
-            <dd className="mt-1 font-bold text-slate-900">{vehicle.drivetrain || "Delantera"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Color exterior</dt>
-            <dd className="mt-1 font-bold text-slate-900">{vehicle.color || "No especificado"}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500 font-semibold uppercase">Sucursal</dt>
-            <dd className="mt-1 font-bold text-slate-900">{vehicle.branch}</dd>
-          </div>
-        </dl>
-      </section>
-
-      {/* Phase 3 Extension Notice */}
-      <div className="rounded-2xl border border-dashed border-teal-300 bg-teal-50/50 p-6 text-center space-y-2">
-        <span className="inline-block rounded-full bg-brand/20 px-3 py-1 text-xs font-bold text-brand">
-          Punto de extensión (Fase 3: Ficha Detallada)
-        </span>
-        <h3 className="font-bold text-slate-900 text-base">
-          Galería completa e inspección técnica
-        </h3>
-        <p className="text-sm text-slate-600 max-w-lg mx-auto">
-          En la Fase 3 estará disponible la galería fotográfica HD de 360°, el reporte de inspección
-          punto a punto y las acciones de cotización directa y apartado.
-        </p>
-        <div className="pt-3">
+          <dl className="mt-4 space-y-1 text-sm text-slate-600">
+            {Object.entries(vehicle.branch.hours).map(([day, hours]) => (
+              <div key={day}>
+                <dt className="inline font-medium">{day}: </dt>
+                <dd className="inline">{hours}</dd>
+              </div>
+            ))}
+          </dl>
           <Link
-            href="/catalogo"
-            className="inline-block rounded-xl bg-accent-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-accent-700 transition-colors"
+            className="mt-5 inline-block text-sm font-semibold text-brand underline"
+            href="/contacto"
           >
-            ← Volver al catálogo de vehículos
+            Ver contacto
           </Link>
-        </div>
+        </aside>
       </div>
+      <Link href={origin} className="inline-block text-sm font-semibold text-brand underline">
+        Volver al catálogo
+      </Link>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
     </div>
   );
 }

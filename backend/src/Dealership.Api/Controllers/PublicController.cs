@@ -308,14 +308,54 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
                 Model = x.Model.Name,
                 Variant = x.Variant != null ? x.Variant.Name : null,
                 x.Year, x.Mileage, x.Price, x.Currency, x.Condition, x.Color, x.Transmission, x.Fuel, x.Drivetrain, x.BodyStyle,
-                Branch = x.Branch.Name, x.BranchId, x.CustomFields, x.CreatedAt
+                BranchName = x.Branch.Name, x.Branch.Address, x.Branch.Phones, x.Branch.Hours, x.CustomFields, x.PublishedAt
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (vehicle is null) return NotFound(new ProblemDetails { Title = "Vehículo no disponible.", Detail = "El vehículo solicitado no se encuentra en el inventario publicado." });
+        if (vehicle is null) return Unavailable();
 
         var publicKeys = await db.CustomFieldDefinitions.AsNoTracking().Where(x => x.IsActive && x.IsPublic).Select(x => x.Key).ToListAsync(cancellationToken);
-        return Ok(new PublicVehicleDetailDto(vehicle.Id, vehicle.Make, vehicle.Model, vehicle.Variant, vehicle.Year, vehicle.Mileage, vehicle.Price, vehicle.Currency, vehicle.Condition, vehicle.Color, vehicle.Transmission, vehicle.Fuel, vehicle.Drivetrain, vehicle.BodyStyle, vehicle.Branch, vehicle.BranchId, FilterPublicCustomFields(vehicle.CustomFields, publicKeys), null, vehicle.CreatedAt));
+        var equipment = await db.Set<VehicleEquipment>().AsNoTracking()
+            .Where(x => x.VehicleId == id && !x.Equipment.IsDeleted)
+            .OrderBy(x => x.Equipment.Name)
+            .Select(x => x.Equipment.Name)
+            .ToListAsync(cancellationToken);
+        return Ok(new PublicVehicleDetailDto(
+            vehicle.Id, vehicle.Make, vehicle.Model, vehicle.Variant, vehicle.Year, vehicle.Mileage, vehicle.Price, vehicle.Currency,
+            vehicle.Condition, vehicle.Color, vehicle.Transmission, vehicle.Fuel, vehicle.Drivetrain, vehicle.BodyStyle,
+            new PublicVehicleBranchDto(vehicle.BranchName, vehicle.Address, ParsePhones(vehicle.Phones), ParseHours(vehicle.Hours)),
+            equipment, FilterPublicCustomFields(vehicle.CustomFields, publicKeys), vehicle.PublishedAt is null ? null : DateOnly.FromDateTime(vehicle.PublishedAt.Value.UtcDateTime), []));
+    }
+
+    [HttpGet("vehicles/{id:guid}/similar")]
+    public async Task<ActionResult<IReadOnlyCollection<PublicVehicleListItemDto>>> GetSimilarVehicles(Guid id, CancellationToken cancellationToken)
+    {
+        Response.Headers.Append("Cache-Control", "public, max-age=45");
+        var source = await db.Vehicles.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == id && x.Status == VehicleStatus.Published && !x.IsDeleted, cancellationToken);
+        if (source is null) return Unavailable();
+
+        var candidates = db.Vehicles.AsNoTracking()
+            .Where(x => x.Status == VehicleStatus.Published && !x.IsDeleted && x.Id != source.Id)
+            .Where(x => x.MakeId == source.MakeId || x.ModelId == source.ModelId || x.BodyStyle == source.BodyStyle ||
+                (x.Price >= source.Price * .75m && x.Price <= source.Price * 1.25m) ||
+                (x.Year >= source.Year - 3 && x.Year <= source.Year + 3));
+
+        // Keep the candidate set bounded in SQL before scoring, then make ties reproducible by ID.
+        var similar = await candidates.OrderBy(x => x.Id).Take(120)
+            .Select(x => new
+            {
+                x.Id, Make = x.Make.Name, Model = x.Model.Name, Variant = x.Variant != null ? x.Variant.Name : null,
+                x.Year, x.Mileage, x.Price, x.Currency, x.Condition, x.Color, x.Transmission, x.Fuel, x.Drivetrain, x.BodyStyle,
+                Branch = x.Branch.Name, x.BranchId, x.CreatedAt,
+                Score = (x.MakeId == source.MakeId ? 40 : 0) + (x.ModelId == source.ModelId ? 35 : 0) +
+                    (x.BodyStyle == source.BodyStyle ? 12 : 0) +
+                    (x.Price >= source.Price * .75m && x.Price <= source.Price * 1.25m ? 8 : 0) +
+                    (x.Year >= source.Year - 3 && x.Year <= source.Year + 3 ? 3 : 0) +
+                    (x.Mileage >= source.Mileage - 30000 && x.Mileage <= source.Mileage + 30000 ? 2 : 0)
+            })
+            .OrderByDescending(x => x.Score).ThenBy(x => x.Id).Take(6).ToListAsync(cancellationToken);
+        return Ok(similar.Select(x => new PublicVehicleListItemDto(x.Id, x.Make, x.Model, x.Variant, x.Year, x.Mileage, x.Price, x.Currency, x.Condition, x.Color, x.Transmission, x.Fuel, x.Drivetrain, x.BodyStyle, x.Branch, x.BranchId, null, x.CreatedAt)).ToList());
     }
 
     [HttpGet("branches")]
@@ -327,16 +367,29 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
             .AsNoTracking()
             .Where(x => x.IsActive)
             .OrderBy(x => x.Name)
-            .Select(x => new PublicBranchDto(
-                x.Id,
-                x.Name,
-                x.Address,
-                x.Phones,
-                x.Hours
-            ))
+            .Select(x => new { x.Id, x.Name, x.Address, x.Phones, x.Hours })
             .ToListAsync(cancellationToken);
 
-        return Ok(branches);
+        return Ok(branches.Select(x => new PublicBranchDto(x.Id, x.Name, x.Address, ParsePhones(x.Phones), ParseHours(x.Hours))).ToList());
+    }
+
+    private NotFoundObjectResult Unavailable() => NotFound(new ProblemDetails
+    {
+        Status = StatusCodes.Status404NotFound,
+        Title = "Vehículo no disponible.",
+        Detail = "El vehículo solicitado no se encuentra en el inventario publicado."
+    });
+
+    private static IReadOnlyCollection<string> ParsePhones(string raw)
+    {
+        try { return JsonSerializer.Deserialize<string[]>(raw) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseHours(string raw)
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(raw) ?? new Dictionary<string, string>(); }
+        catch (JsonException) { return new Dictionary<string, string>(); }
     }
 
     private static string EscapeLike(string value) =>
@@ -457,11 +510,11 @@ public sealed record PublicVehicleDetailDto(
     string? Fuel,
     string? Drivetrain,
     string? BodyStyle,
-    string Branch,
-    Guid BranchId,
+    PublicVehicleBranchDto Branch,
+    IReadOnlyCollection<string> Equipment,
     string CustomFields,
-    string? ImageUrl,
-    DateTimeOffset CreatedAt
+    DateOnly? PublishedOn,
+    IReadOnlyCollection<PublicVehicleImageDto> Images
 );
 
 public sealed record PublicPagedResult<T>(IReadOnlyCollection<T> Items, int Total, int Page, int PageSize);
@@ -487,5 +540,7 @@ public sealed record PublicMakeOptionDto(Guid Id, string Name, IReadOnlyCollecti
 public sealed record PublicModelOptionDto(Guid Id, string Name, IReadOnlyCollection<PublicVariantOptionDto> Variants);
 public sealed record PublicVariantOptionDto(Guid Id, string Name);
 public sealed record PublicBranchOptionDto(Guid Id, string Name);
-public sealed record PublicBranchDto(Guid Id, string Name, string Address, string Phones, string Hours);
+public sealed record PublicVehicleBranchDto(string Name, string Address, IReadOnlyCollection<string> Phones, IReadOnlyDictionary<string, string> Hours);
+public sealed record PublicVehicleImageDto(string Url, string Alt, int Position);
+public sealed record PublicBranchDto(Guid Id, string Name, string Address, IReadOnlyCollection<string> Phones, IReadOnlyDictionary<string, string> Hours);
 public sealed record PublicCustomFieldFilterDto(string Key, string Label, CustomFieldType Type, IReadOnlyCollection<string> Values);

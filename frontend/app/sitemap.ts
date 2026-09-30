@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
+// The sitemap is rendered at request time so `next build` never requires the API to be running.
+export const dynamic = "force-dynamic";
+
 const backend = process.env.BACKEND_URL ?? "http://localhost:5080";
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -36,6 +39,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
+  // Metadata routes can be evaluated while compiling. Keep production builds
+  // independent from a locally running API; runtime requests still paginate it.
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return staticRoutes;
+  }
+
   try {
     const vehicleRoutes: MetadataRoute.Sitemap = [];
     let page = 1;
@@ -53,7 +62,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           priority: 0.8,
         })),
       );
-      if (page >= data.totalPages) break;
+      if (page * data.pageSize >= data.total) break;
       page += 1;
     }
     return [...staticRoutes, ...vehicleRoutes];

@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Net;
+using System.Threading.RateLimiting;
 using System.Text;
 using System.Text.Json.Serialization;
 using Asp.Versioning;
@@ -8,6 +10,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -41,9 +44,32 @@ builder.Services.AddAuthorization(options => options.AddPolicy("Administration",
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.Headers.RetryAfter = "60";
+        await Results.Problem(
+            statusCode: StatusCodes.Status429TooManyRequests,
+            title: "Demasiadas solicitudes.",
+            detail: "Espera un minuto antes de intentar nuevamente.").ExecuteAsync(context.HttpContext);
+    };
     options.AddFixedWindowLimiter("login", limiter => { limiter.PermitLimit = 5; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; });
     var publicLimit = builder.Configuration.GetValue<int>("RateLimiting:PublicCatalogPermitLimit", 100);
-    options.AddFixedWindowLimiter("public-catalog", limiter => { limiter.PermitLimit = publicLimit; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; });
+    options.AddPolicy("public-catalog", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = publicLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+});
+var trustedProxyAddresses = (builder.Configuration.GetSection("ForwardedHeaders:KnownProxies").Get<string[]>() ?? [])
+    .Select(value => IPAddress.TryParse(value, out var address) ? address : null)
+    .Where(address => address is not null)
+    .Cast<IPAddress>()
+    .ToHashSet();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Only infrastructure declared by configuration can alter a client identity or scheme.
+    options.KnownProxies.Clear();
+    options.KnownNetworks.Clear();
+    foreach (var address in trustedProxyAddresses) options.KnownProxies.Add(address);
 });
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy.WithOrigins(builder.Configuration["Frontend:Origin"] ?? "http://localhost:3000").AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddHealthChecks().AddDbContextCheck<DealershipDbContext>();
@@ -51,6 +77,16 @@ var app = builder.Build();
 app.Use(async (context, next) => { var correlation = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N"); context.Items["CorrelationId"] = correlation; context.Response.Headers["X-Correlation-ID"] = correlation; await next(); });
 app.UseExceptionHandler(errorApp => errorApp.Run(async context => { var correlation = context.Items["CorrelationId"]?.ToString(); var problem = new ProblemDetails { Status = StatusCodes.Status500InternalServerError, Title = "Ocurrió un error inesperado.", Detail = "Intenta nuevamente o contacta a soporte con el identificador de seguimiento.", Extensions = { ["correlationId"] = correlation } }; await Results.Problem(problem.Detail, statusCode: problem.Status, title: problem.Title, extensions: problem.Extensions).ExecuteAsync(context); }));
 app.UseHsts();
+app.Use(async (context, next) =>
+{
+    if (context.Connection.RemoteIpAddress is null || !trustedProxyAddresses.Contains(context.Connection.RemoteIpAddress))
+    {
+        context.Request.Headers.Remove("X-Forwarded-For");
+        context.Request.Headers.Remove("X-Forwarded-Proto");
+    }
+    await next();
+});
+app.UseForwardedHeaders();
 app.Use(async (context, next) => { context.Response.Headers.Append("X-Content-Type-Options", "nosniff"); context.Response.Headers.Append("X-Frame-Options", "DENY"); context.Response.Headers.Append("Referrer-Policy", "no-referrer"); await next(); });
 app.UseHttpsRedirection(); app.UseCors("frontend"); app.UseRateLimiter(); app.UseAuthentication(); app.UseAuthorization();
 app.UseSwagger(); app.UseSwaggerUI(); app.MapHealthChecks("/health"); app.MapControllers();
