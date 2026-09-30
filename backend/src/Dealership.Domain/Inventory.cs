@@ -25,6 +25,9 @@ public sealed class CustomFieldDefinition : IAuditableEntity
     public Guid Id { get; init; } = Guid.NewGuid(); public string Key { get; set; } = string.Empty; public string Label { get; set; } = string.Empty;
     public CustomFieldType Type { get; set; } public bool IsRequired { get; set; } public string? VehicleType { get; set; } public string Options { get; set; } = "[]";
     public bool IsActive { get; set; } = true;
+    // Public exposure and filtering are opt-in; existing definitions remain private.
+    public bool IsPublic { get; set; }
+    public bool IsFilterable { get; set; }
 }
 
 public sealed class Vehicle : IAuditableEntity

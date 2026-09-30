@@ -23,6 +23,8 @@ jobs:
         with: { dotnet-version: 8.0.x }
       - run: dotnet build backend/Dealership.sln --configuration Release
       - run: dotnet test backend/Dealership.sln --configuration Release --no-build
+        env:
+          ConnectionStrings__Default: Host=localhost;Port=5432;Database=dealership_dev;Username=dealership;Password=dealership_dev_password
   frontend:
     runs-on: ubuntu-latest
     steps:

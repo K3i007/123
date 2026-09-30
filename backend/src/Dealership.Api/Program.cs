@@ -38,7 +38,13 @@ builder.Services.AddApiVersioning(options => { options.DefaultApiVersion = new A
 var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? throw new InvalidOperationException("JWT signing key is required.");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters { ValidateIssuer = true, ValidIssuer = builder.Configuration["Jwt:Issuer"], ValidateAudience = true, ValidAudience = builder.Configuration["Jwt:Audience"], ValidateIssuerSigningKey = true, IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)), ValidateLifetime = true, RoleClaimType = ClaimTypes.Role });
 builder.Services.AddAuthorization(options => options.AddPolicy("Administration", policy => policy.RequireRole("Administrator", "Manager")));
-builder.Services.AddRateLimiter(options => options.AddFixedWindowLimiter("login", limiter => { limiter.PermitLimit = 5; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; }));
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("login", limiter => { limiter.PermitLimit = 5; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; });
+    var publicLimit = builder.Configuration.GetValue<int>("RateLimiting:PublicCatalogPermitLimit", 100);
+    options.AddFixedWindowLimiter("public-catalog", limiter => { limiter.PermitLimit = publicLimit; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; });
+});
 builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy.WithOrigins(builder.Configuration["Frontend:Origin"] ?? "http://localhost:3000").AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddHealthChecks().AddDbContextCheck<DealershipDbContext>();
 var app = builder.Build();

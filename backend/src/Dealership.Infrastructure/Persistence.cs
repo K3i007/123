@@ -39,6 +39,10 @@ public sealed class DealershipDbContext(DbContextOptions<DealershipDbContext> op
             x.Property(p => p.Price).HasPrecision(18, 2); x.Property(p => p.CustomFields).HasColumnType("jsonb"); x.Property(p => p.Version).IsRowVersion();
             x.HasIndex(p => p.CustomFields).HasMethod("gin"); x.HasIndex(p => p.Vin).IsUnique().HasFilter("\"Vin\" IS NOT NULL AND \"IsDeleted\" = false"); x.HasIndex(p => p.Plate).IsUnique().HasFilter("\"Plate\" IS NOT NULL AND \"IsDeleted\" = false");
             x.HasIndex(p => new { p.Status, p.BranchId }); x.HasIndex(p => new { p.MakeId, p.ModelId, p.Year }); x.HasIndex(p => p.Price);
+            var published = (int)VehicleStatus.Published;
+            x.HasIndex(p => new { p.ModelId, p.MakeId, p.Year, p.Price, p.Mileage })
+             .HasDatabaseName("IX_Vehicles_Published_Catalog")
+             .HasFilter($"\"Status\" = {published} AND \"IsDeleted\" = false");
         });
         builder.Entity<VehicleEquipment>().HasKey(x => new { x.VehicleId, x.EquipmentId });
         builder.Entity<VehiclePriceHistory>(x => { x.Property(p => p.PreviousPrice).HasPrecision(18, 2); x.Property(p => p.NewPrice).HasPrecision(18, 2); x.HasIndex(p => new { p.VehicleId, p.ChangedAt }); });

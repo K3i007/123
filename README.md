@@ -34,4 +34,6 @@ No subas `.env`. `AUTH_COOKIE_SECURE=false` permite cookies HTTP únicamente par
 
 El CLI de Docker y Docker Compose se encuentran instalados en el sistema (`Docker version 29.8.1`, `Docker Compose version v5.5.1`). Si el demonio de Docker Desktop no se encuentra corriendo en segundo plano durante la sesión local, la plataforma se ejecuta directamente contra una instancia local de PostgreSQL (configurada en `ConnectionStrings__Default` en `.env`, típicamente puerto `5432` o `5433`). La configuración de `docker-compose.yml` mapea el puerto `POSTGRES_PORT` (por defecto `5433`) para evitar colisiones con instancias existentes.
 
+Docker Compose requiere que Docker Desktop tenga el daemon activo. En la verificación más reciente el CLI estuvo disponible, pero el daemon `dockerDesktopLinuxEngine` no estaba iniciado, por lo que la ruta con Docker quedó sin verificar. Se debe ejecutar `docker compose up -d` antes de declarar esa ruta verificada.
+
 Consulta [arquitectura](docs/architecture.md), la [matriz de permisos](docs/permissions-matrix.md) y las decisiones en `docs/decisions/`.
