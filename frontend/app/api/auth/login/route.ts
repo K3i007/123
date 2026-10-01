@@ -1,14 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { rejectCrossSiteMutation, refreshCookieOptions as cookieOptions } from "../../../../lib/request-security";
 const backend = process.env.BACKEND_URL ?? "http://localhost:5080";
-const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.AUTH_COOKIE_SECURE === "true" || process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
-  path: "/",
-  maxAge: 60 * 60 * 24 * 14,
-};
 export async function POST(request: Request) {
+  const rejected = rejectCrossSiteMutation(request);
+  if (rejected) return rejected;
   const response = await fetch(`${backend}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

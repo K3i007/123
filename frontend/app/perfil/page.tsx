@@ -1,44 +1,20 @@
-import Link from "next/link";
-import type { Metadata } from "next";
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "../../components/auth-provider";
+import { request } from "../../lib/api";
 
-export const metadata: Metadata = {
-  title: "Área de Clientes",
-  description: "Perfil de cliente, favoritos y cotizaciones guardadas.",
-};
-
-export default function PerfilPage() {
-  return (
-    <div className="mx-auto max-w-xl py-16 text-center space-y-6">
-      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-teal-50 text-brand">
-        <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-          />
-        </svg>
-      </div>
-
-      <span className="inline-block rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
-        Próximamente en Fase 4
-      </span>
-
-      <h1 className="text-3xl font-black text-slate-900">Área de Clientes y Perfil</h1>
-
-      <p className="text-sm text-slate-600 leading-relaxed">
-        En la Fase 4 podrás gestionar tu cuenta, consultar tus autos favoritos, comparar vehículos
-        lado a lado y revisar el estado de tus cotizaciones y citas de manejo.
-      </p>
-
-      <div className="pt-4">
-        <Link
-          href="/catalogo"
-          className="inline-block rounded-xl bg-accent-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-accent-700 transition-colors"
-        >
-          Volver al catálogo
-        </Link>
-      </div>
-    </div>
-  );
+type Profile = { email: string; name: string; phone: string | null; language: string; marketingConsent: boolean; emailVerified: boolean };
+export default function ProfilePage() {
+  const { ready, authenticated, accountType, logout } = useAuth();
+  const router = useRouter(); const [profile, setProfile] = useState<Profile | null>(null); const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (ready && (!authenticated || accountType !== "Customer")) { router.replace("/cuenta/login?returnTo=/perfil"); return; }
+    if (authenticated && accountType === "Customer") void request<Profile>("/customers/profile").then(setProfile).catch(() => setMessage("No fue posible cargar el perfil."));
+  }, [ready, authenticated, accountType, router]);
+  if (!profile) return <section className="mx-auto max-w-xl py-16"><p>{message || "Cargando tu perfil..."}</p></section>;
+  async function save(form: FormData) {
+    try { await request("/customers/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.get("name"), phone: form.get("phone") || null, language: form.get("language"), marketingConsent: form.get("marketingConsent") === "on" }) }); setMessage("Perfil actualizado."); } catch { setMessage("No fue posible actualizar el perfil."); }
+  }
+  return <section className="mx-auto max-w-xl py-12"><h1 className="text-3xl font-bold text-slate-900">Mi perfil</h1><p className="mt-2 text-sm text-slate-600">{profile.email} · {profile.emailVerified ? "Correo verificado" : "Correo pendiente de verificación"}</p><form action={save} className="mt-8 space-y-4"><label className="block text-sm font-medium">Nombre<input required name="name" defaultValue={profile.name} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm font-medium">Teléfono<input name="phone" defaultValue={profile.phone ?? ""} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm font-medium">Idioma<select name="language" defaultValue={profile.language} className="mt-1 w-full rounded border p-2"><option value="es-MX">Español</option><option value="en-US">English</option></select></label><label className="flex gap-2 text-sm"><input name="marketingConsent" type="checkbox" defaultChecked={profile.marketingConsent} /> Acepto recibir novedades</label>{message && <p role="status" className="text-sm text-emerald-700">{message}</p>}<button className="rounded bg-brand px-4 py-2 font-semibold text-white">Guardar cambios</button></form><button onClick={() => void logout().then(() => router.replace("/"))} className="mt-8 rounded border px-4 py-2 text-sm">Cerrar sesión</button></section>;
 }

@@ -12,6 +12,11 @@ public sealed class DealershipDbContext(DbContextOptions<DealershipDbContext> op
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<OneTimeToken> OneTimeTokens => Set<OneTimeToken>();
+    public DbSet<FavoriteVehicle> FavoriteVehicles => Set<FavoriteVehicle>();
+    public DbSet<SavedComparisonVehicle> SavedComparisonVehicles => Set<SavedComparisonVehicle>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
+    public DbSet<AccountRateLimit> AccountRateLimits => Set<AccountRateLimit>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Branch> Branches => Set<Branch>(); public DbSet<Make> Makes => Set<Make>(); public DbSet<Model> Models => Set<Model>(); public DbSet<Variant> Variants => Set<Variant>();
     public DbSet<TechnicalCatalog> TechnicalCatalogs => Set<TechnicalCatalog>(); public DbSet<Equipment> Equipment => Set<Equipment>(); public DbSet<CustomFieldDefinition> CustomFieldDefinitions => Set<CustomFieldDefinition>();
@@ -19,13 +24,18 @@ public sealed class DealershipDbContext(DbContextOptions<DealershipDbContext> op
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
-        builder.Entity<User>(entity => { entity.HasIndex(x => x.Email).IsUnique(); entity.Property(x => x.Email).HasMaxLength(256); });
+        builder.Entity<User>(entity => { entity.HasIndex(x => x.Email).IsUnique(); entity.Property(x => x.Email).HasMaxLength(256); entity.Property(x => x.DisplayName).HasMaxLength(160); entity.Property(x => x.Phone).HasMaxLength(32); entity.Property(x => x.Language).HasMaxLength(16); entity.Property(x => x.PrivacyPolicyVersion).HasMaxLength(32); });
         builder.Entity<Role>(entity => { entity.HasIndex(x => x.Name).IsUnique(); entity.Property(x => x.Name).HasMaxLength(100); });
         builder.Entity<UserRole>().HasKey(x => new { x.UserId, x.RoleId });
         builder.Entity<UserRole>().HasOne(x => x.User).WithMany(x => x.Roles).HasForeignKey(x => x.UserId);
         builder.Entity<UserRole>().HasOne(x => x.Role).WithMany(x => x.Users).HasForeignKey(x => x.RoleId);
         builder.Entity<RefreshToken>().HasIndex(x => x.TokenHash).IsUnique();
         builder.Entity<RefreshToken>().HasIndex(x => new { x.FamilyId, x.RevokedAt });
+        builder.Entity<OneTimeToken>(entity => { entity.HasIndex(x => x.TokenHash).IsUnique(); entity.HasIndex(x => new { x.UserId, x.Purpose, x.UsedAt }); });
+        builder.Entity<FavoriteVehicle>(entity => { entity.HasIndex(x => new { x.UserId, x.VehicleId }).IsUnique(); entity.HasOne(x => x.Vehicle).WithMany().HasForeignKey(x => x.VehicleId); });
+        builder.Entity<SavedComparisonVehicle>(entity => { entity.HasIndex(x => new { x.UserId, x.VehicleId }).IsUnique(); entity.HasOne(x => x.Vehicle).WithMany().HasForeignKey(x => x.VehicleId); });
+        builder.Entity<SecurityEvent>(entity => { entity.HasIndex(x => new { x.UserId, x.OccurredAt }); entity.Property(x => x.EventType).HasMaxLength(80); entity.Property(x => x.IpHash).HasMaxLength(128); });
+        builder.Entity<AccountRateLimit>(entity => { entity.HasIndex(x => new { x.Purpose, x.AccountHash }).IsUnique(); entity.HasIndex(x => x.ExpiresAt); entity.Property(x => x.AccountHash).HasMaxLength(128); entity.Property(x => x.Purpose).HasMaxLength(40); });
         builder.Entity<AuditLog>().HasIndex(x => x.OccurredAt);
         builder.Entity<Branch>(x => { x.Property(p => p.Name).HasMaxLength(160); x.HasIndex(p => p.Name).IsUnique(); });
         builder.Entity<Make>(x => { x.Property(p => p.Name).HasMaxLength(100); x.HasIndex(p => new { p.Name, p.IsDeleted }).IsUnique(); });
@@ -52,7 +62,8 @@ public sealed class DealershipDbContext(DbContextOptions<DealershipDbContext> op
 
 public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser, ICorrelationContext correlation) : SaveChangesInterceptor
 {
-    private static readonly HashSet<string> SensitiveProperties = new(StringComparer.OrdinalIgnoreCase) { "PasswordHash", "TokenHash", "RefreshToken", "AccessToken", "Password" };
+    private static readonly HashSet<string> SensitiveProperties = new(StringComparer.OrdinalIgnoreCase) { "PasswordHash", "TokenHash", "RefreshToken", "AccessToken", "Password", "Email", "DisplayName", "Phone", "PrivacyPolicyVersion" };
+    private static readonly HashSet<string> SensitiveEntities = new(StringComparer.Ordinal) { nameof(User), nameof(RefreshToken), nameof(OneTimeToken), nameof(SecurityEvent) };
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -72,8 +83,9 @@ public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser, ICorre
         var entries = db.ChangeTracker.Entries().Where(x => x.Entity is IAuditableEntity && x.Entity is not AuditLog && x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList();
         foreach (var entry in entries)
         {
-            var oldValues = entry.State == EntityState.Added ? null : Serialize(entry, true);
-            var newValues = entry.State == EntityState.Deleted ? null : Serialize(entry, false);
+            var sensitiveEntity = SensitiveEntities.Contains(entry.Metadata.ClrType.Name);
+            var oldValues = sensitiveEntity || entry.State == EntityState.Added ? null : Serialize(entry, true);
+            var newValues = sensitiveEntity || entry.State == EntityState.Deleted ? null : Serialize(entry, false);
             db.AuditLogs.Add(new AuditLog { OccurredAt = DateTimeOffset.UtcNow, ActorId = currentUser.Id, Action = entry.State.ToString(), EntityName = entry.Metadata.ClrType.Name, EntityId = ((IAuditableEntity)entry.Entity).Id.ToString(), OldValues = oldValues, NewValues = newValues, CorrelationId = correlation.Id });
         }
     }

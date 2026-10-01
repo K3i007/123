@@ -12,15 +12,28 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Dealership.Infrastructure;
 
-public sealed class AuthenticationService(DealershipDbContext db, IConfiguration configuration) : IAuthenticationService
+public sealed class AuthenticationService(DealershipDbContext db, IConfiguration configuration, IPasswordWorkService passwords) : IAuthenticationService
 {
-    private readonly PasswordHasher<User> passwordHasher = new();
     private readonly byte[] tokenHashKey = Encoding.UTF8.GetBytes(configuration["Jwt:SigningKey"] ?? throw new InvalidOperationException("JWT signing key is missing."));
 
-    public async Task<TokenResult?> LoginAsync(LoginCommand command, CancellationToken cancellationToken)
+    public async Task<TokenResult?> LoginAsync(LoginCommand command, CancellationToken cancellationToken, AccountType? expectedAccountType = null)
     {
         var user = await db.Users.Include(x => x.Roles).ThenInclude(x => x.Role).SingleOrDefaultAsync(x => x.Email == command.Email.Trim().ToLowerInvariant(), cancellationToken);
-        if (user is null || !user.IsActive || passwordHasher.VerifyHashedPassword(user, user.PasswordHash, command.Password) == PasswordVerificationResult.Failed) return null;
+        if (user is null)
+        {
+            // Match the PBKDF2 work of a real password verification to reduce enumeration timing signal.
+            _ = passwords.VerifyUnknown(command.Password);
+            return null;
+        }
+        var passwordValid = passwords.Verify(user, user.PasswordHash, command.Password);
+        var valid = passwordValid && user.IsActive && (expectedAccountType is null || user.AccountType == expectedAccountType);
+        if (!valid)
+        {
+            user.FailedLoginCount++;
+            await db.SaveChangesAsync(cancellationToken);
+            return null;
+        }
+        user.FailedLoginCount = 0;
         return await CreateTokenPairAsync(user, Guid.NewGuid(), cancellationToken);
     }
 
@@ -52,7 +65,7 @@ public sealed class AuthenticationService(DealershipDbContext db, IConfiguration
         var refresh = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         db.RefreshTokens.Add(new RefreshToken { UserId = user.Id, FamilyId = familyId, TokenHash = Hash(refresh), ExpiresAt = DateTimeOffset.UtcNow.AddDays(14) });
         await db.SaveChangesAsync(cancellationToken);
-        var claims = new List<Claim> { new(JwtRegisteredClaimNames.Sub, user.Id.ToString()), new(JwtRegisteredClaimNames.Email, user.Email) };
+        var claims = new List<Claim> { new(JwtRegisteredClaimNames.Sub, user.Id.ToString()), new("account_type", user.AccountType.ToString()) };
         claims.AddRange(user.Roles.Select(x => new Claim(ClaimTypes.Role, x.Role.Name)));
         var key = new SymmetricSecurityKey(tokenHashKey);
         var jwt = new JwtSecurityToken(configuration["Jwt:Issuer"], configuration["Jwt:Audience"], claims, expires: accessExpires.UtcDateTime, signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));

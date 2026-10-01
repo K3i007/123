@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { rejectCrossSiteMutation } from "../../../../lib/request-security";
 const backend = process.env.BACKEND_URL ?? "http://localhost:5080";
-export async function POST() {
+export async function POST(request: Request) {
+  const rejected = rejectCrossSiteMutation(request);
+  if (rejected) return rejected;
   const store = await cookies();
   const refreshToken = store.get("refresh_token")?.value;
   if (refreshToken)

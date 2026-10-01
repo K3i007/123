@@ -8,9 +8,26 @@ public sealed class User : IAuditableEntity
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public AccountType AccountType { get; set; } = AccountType.Staff;
+    public bool EmailVerified { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Phone { get; set; }
+    public string Language { get; set; } = "es-MX";
+    public bool MarketingConsent { get; set; }
+    public string? PrivacyPolicyVersion { get; set; }
+    public DateTimeOffset? PrivacyAcceptedAt { get; set; }
+    public int FailedLoginCount { get; set; }
+    public DateTimeOffset? LockoutEnd { get; set; }
     public ICollection<UserRole> Roles { get; } = new List<UserRole>();
     public ICollection<RefreshToken> RefreshTokens { get; } = new List<RefreshToken>();
+    public ICollection<OneTimeToken> OneTimeTokens { get; } = new List<OneTimeToken>();
+    public ICollection<FavoriteVehicle> Favorites { get; } = new List<FavoriteVehicle>();
+    public ICollection<SavedComparisonVehicle> SavedComparisonVehicles { get; } = new List<SavedComparisonVehicle>();
 }
+
+public enum AccountType { Staff, Customer }
+
+public enum OneTimeTokenPurpose { EmailVerification, PasswordReset }
 
 public sealed class Role : IAuditableEntity
 {
@@ -38,6 +55,56 @@ public sealed class RefreshToken : IAuditableEntity
     public DateTimeOffset? UsedAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
     public Guid? ReplacedById { get; set; }
+}
+
+public sealed class OneTimeToken : IAuditableEntity
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public User User { get; set; } = null!;
+    public OneTimeTokenPurpose Purpose { get; set; }
+    public string TokenHash { get; set; } = string.Empty;
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? UsedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class FavoriteVehicle : IAuditableEntity
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public User User { get; set; } = null!;
+    public Guid VehicleId { get; set; }
+    public Vehicle Vehicle { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class SavedComparisonVehicle : IAuditableEntity
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public User User { get; set; } = null!;
+    public Guid VehicleId { get; set; }
+    public Vehicle Vehicle { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class SecurityEvent : IAuditableEntity
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid? UserId { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string? IpHash { get; set; }
+    public DateTimeOffset OccurredAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class AccountRateLimit : IAuditableEntity
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public string Purpose { get; set; } = string.Empty;
+    public string AccountHash { get; set; } = string.Empty;
+    public int AttemptCount { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 }
 
 public sealed class AuditLog

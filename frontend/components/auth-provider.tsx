@@ -6,7 +6,9 @@ type AuthContextValue = {
   ready: boolean;
   authenticated: boolean;
   roles: string[];
+  accountType: "Staff" | "Customer" | null;
   login(email: string, password: string): Promise<void>;
+  loginCustomer(email: string, password: string): Promise<void>;
   logout(): Promise<void>;
 };
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -14,6 +16,7 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
   const [token, setToken] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const roles = useMemo(() => (token ? readRoles(token) : []), [token]);
+  const accountType = useMemo(() => (token ? readAccountType(token) : null), [token]);
   function save(value: string | null) {
     setAccessToken(value);
     setToken(value);
@@ -30,6 +33,7 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
       ready,
       authenticated: token !== null,
       roles,
+      accountType,
       async login(email, password) {
         const response = await fetch("/api/auth/login", {
           method: "POST",
@@ -43,8 +47,17 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
         await fetch("/api/auth/logout", { method: "POST" });
         save(null);
       },
+      async loginCustomer(email, password) {
+        const response = await fetch("/api/customer/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+        if (!response.ok) throw new Error("No fue posible iniciar sesión.");
+        save(((await response.json()) as { accessToken: string }).accessToken);
+      },
     }),
-    [ready, token, roles],
+    [ready, token, roles, accountType],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -66,5 +79,13 @@ function readRoles(token: string): string[] {
         : [];
   } catch {
     return [];
+  }
+}
+function readAccountType(token: string): "Staff" | "Customer" | null {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as Record<string, unknown>;
+    return payload.account_type === "Staff" || payload.account_type === "Customer" ? payload.account_type : null;
+  } catch {
+    return null;
   }
 }

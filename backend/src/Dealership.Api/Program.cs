@@ -26,6 +26,10 @@ builder.Services.AddScoped<ICorrelationContext, HttpCorrelationContext>();
 builder.Services.AddScoped<AuditSaveChangesInterceptor>();
 builder.Services.AddDbContext<DealershipDbContext>((services, options) => options.UseNpgsql(builder.Configuration.GetConnectionString("Default")).AddInterceptors(services.GetRequiredService<AuditSaveChangesInterceptor>()));
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddSingleton<IPasswordWorkService, PasswordWorkService>();
+builder.Services.AddScoped<IAccountRateLimitService, AccountRateLimitService>();
+builder.Services.AddScoped<ICustomerAccountService, CustomerAccountService>();
+builder.Services.AddSingleton<IEmailSender, DevelopmentEmailSender>();
 builder.Services.AddScoped<DevelopmentDataSeeder>();
 builder.Services.AddSingleton<BackgroundTaskQueue>();
 builder.Services.AddSingleton<IBackgroundTaskQueue>(services => services.GetRequiredService<BackgroundTaskQueue>());
@@ -40,7 +44,12 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddApiVersioning(options => { options.DefaultApiVersion = new ApiVersion(1); options.AssumeDefaultVersionWhenUnspecified = true; options.ReportApiVersions = true; }).AddApiExplorer(options => options.GroupNameFormat = "'v'V");
 var jwtKey = builder.Configuration["Jwt:SigningKey"] ?? throw new InvalidOperationException("JWT signing key is required.");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => options.TokenValidationParameters = new TokenValidationParameters { ValidateIssuer = true, ValidIssuer = builder.Configuration["Jwt:Issuer"], ValidateAudience = true, ValidAudience = builder.Configuration["Jwt:Audience"], ValidateIssuerSigningKey = true, IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)), ValidateLifetime = true, RoleClaimType = ClaimTypes.Role });
-builder.Services.AddAuthorization(options => options.AddPolicy("Administration", policy => policy.RequireRole("Administrator", "Manager")));
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Staff", policy => policy.RequireClaim("account_type", "Staff"));
+    options.AddPolicy("Customer", policy => policy.RequireClaim("account_type", "Customer"));
+    options.AddPolicy("Administration", policy => policy.RequireClaim("account_type", "Staff").RequireRole("Administrator", "Manager"));
+});
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -53,6 +62,13 @@ builder.Services.AddRateLimiter(options =>
             detail: "Espera un minuto antes de intentar nuevamente.").ExecuteAsync(context.HttpContext);
     };
     options.AddFixedWindowLimiter("login", limiter => { limiter.PermitLimit = 5; limiter.Window = TimeSpan.FromMinutes(1); limiter.QueueLimit = 0; });
+    var customerLoginLimit = builder.Configuration.GetValue("RateLimiting:CustomerLoginPermitLimit", 20);
+    var customerAccountLimit = builder.Configuration.GetValue("RateLimiting:CustomerAccountPermitLimit", 3);
+    var customerIpLimit = builder.Configuration.GetValue("RateLimiting:CustomerIpPermitLimit", 20);
+    options.AddPolicy("customer-login", context => RateLimitPartition.GetFixedWindowLimiter($"customer-login:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerLoginLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("customer-register", context => RateLimitPartition.GetFixedWindowLimiter($"customer-register:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("customer-reset", context => RateLimitPartition.GetFixedWindowLimiter($"customer-reset:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("customer-resend", context => RateLimitPartition.GetFixedWindowLimiter($"customer-resend:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
     var publicLimit = builder.Configuration.GetValue<int>("RateLimiting:PublicCatalogPermitLimit", 100);
     options.AddPolicy("public-catalog", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",

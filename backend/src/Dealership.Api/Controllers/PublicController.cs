@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using Dealership.Application;
 using Dealership.Domain;
 using Dealership.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
@@ -16,6 +17,18 @@ namespace Dealership.Api.Controllers;
 [EnableRateLimiting("public-catalog")]
 public sealed class PublicController(DealershipDbContext db) : ControllerBase
 {
+    [HttpGet("vehicles/compare")]
+    public async Task<ActionResult<IReadOnlyCollection<PublicComparisonVehicle>>> Compare([FromQuery] Guid[] ids, CancellationToken cancellationToken)
+    {
+        var requested = ids.Where(x => x != Guid.Empty).Distinct().ToArray();
+        if (requested.Length is < 2 or > 4)
+            return BadRequest(new ProblemDetails { Title = "Comparación inválida.", Detail = "Selecciona entre dos y cuatro vehículos.", Status = StatusCodes.Status400BadRequest });
+        var vehicles = await db.Vehicles.AsNoTracking().Where(x => requested.Contains(x.Id) && x.Status == VehicleStatus.Published && !x.IsDeleted)
+            .Include(x => x.Make).Include(x => x.Model).Include(x => x.Variant).Include(x => x.Equipment).ThenInclude(x => x.Equipment)
+            .ToListAsync(cancellationToken);
+        return Ok(vehicles.OrderBy(x => Array.IndexOf(requested, x.Id)).Select(x => new PublicComparisonVehicle(x.Id, x.Make.Name, x.Model.Name, x.Variant?.Name, x.Year, x.Mileage, x.Price, x.Currency, x.Transmission, x.Fuel, x.Drivetrain, x.BodyStyle, null, x.Equipment.Select(e => e.Equipment.Name).OrderBy(x => x).ToArray())).ToList());
+    }
+
     [HttpGet("vehicles")]
     public async Task<ActionResult<PublicPagedResult<PublicVehicleListItemDto>>> GetVehicles([FromQuery] PublicVehicleQuery query, CancellationToken cancellationToken)
     {
@@ -372,13 +385,16 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
 
         return Ok(branches.Select(x => new PublicBranchDto(x.Id, x.Name, x.Address, ParsePhones(x.Phones), ParseHours(x.Hours))).ToList());
     }
-
-    private NotFoundObjectResult Unavailable() => NotFound(new ProblemDetails
+    private NotFoundObjectResult Unavailable()
     {
-        Status = StatusCodes.Status404NotFound,
-        Title = "Vehículo no disponible.",
-        Detail = "El vehículo solicitado no se encuentra en el inventario publicado."
-    });
+        Response.Headers["Cache-Control"] = "no-store";
+        return NotFound(new ProblemDetails
+        {
+            Status = StatusCodes.Status404NotFound,
+            Title = "Vehículo no disponible.",
+            Detail = "El vehículo solicitado no se encuentra en el inventario publicado."
+        });
+    }
 
     private static IReadOnlyCollection<string> ParsePhones(string raw)
     {

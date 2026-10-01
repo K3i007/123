@@ -62,6 +62,22 @@ export function PublicHeader() {
         {/* Desktop Secondary Nav / User / Notifications */}
         <div className="hidden md:flex items-center gap-3">
           <Link
+            href="/comparar"
+            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
+            aria-label="Comparar vehículos"
+            title="Comparar vehículos"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
+          </Link>
+          <Link
+            href="/perfil"
+            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
+            aria-label="Favoritos"
+            title="Favoritos"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21s-7-4.35-7-10a4 4 0 017-2.65A4 4 0 0119 11c0 5.65-7 10-7 10z" /></svg>
+          </Link>
+          <Link
             href="/notificaciones"
             className="relative rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
             aria-label="Notificaciones"

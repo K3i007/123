@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Dealership.Application;
+using Dealership.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -11,7 +12,7 @@ public sealed class AuthController(IAuthenticationService authentication) : Cont
     [HttpPost("login"), EnableRateLimiting("login")]
     public async Task<ActionResult<TokenResult>> Login(LoginCommand command, CancellationToken cancellationToken)
     {
-        var result = await authentication.LoginAsync(command, cancellationToken);
+        var result = await authentication.LoginAsync(command, cancellationToken, AccountType.Staff);
         return result is null ? Unauthorized(new ProblemDetails { Title = "Credenciales inválidas.", Detail = "Verifica tu correo y contraseña." }) : Ok(result);
     }
     [HttpPost("refresh")]

@@ -109,15 +109,21 @@ export default async function VehiculoDetailPage({
   const jsonLd = safeJsonLd({
     "@context": "https://schema.org",
     "@type": "Car",
+    url: `${siteUrl}/vehiculos/${vehicle.id}`,
     name: title,
+    brand: { "@type": "Brand", name: vehicle.make },
+    model: vehicle.model,
     vehicleModelDate: vehicle.year,
     mileageFromOdometer: { "@type": "QuantitativeValue", value: vehicle.mileage, unitCode: "KMT" },
+    itemCondition: vehicle.condition === "New" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition",
+    image: vehicle.images[0]?.url ? new URL(vehicle.images[0].url, siteUrl).toString() : undefined,
     offers: {
       "@type": "Offer",
       price: vehicle.price,
       priceCurrency: vehicle.currency,
       availability: "https://schema.org/InStock",
       url: `${siteUrl}/vehiculos/${vehicle.id}`,
+      itemCondition: vehicle.condition === "New" ? "https://schema.org/NewCondition" : "https://schema.org/UsedCondition",
     },
   });
   return (
@@ -143,7 +149,7 @@ export default async function VehiculoDetailPage({
         <p className="text-3xl font-bold text-slate-900">{price}</p>
       </div>
       <VehicleGallery title={title} images={vehicle.images} />
-      <VehicleActions />
+      <VehicleActions vehicleId={vehicle.id} />
       <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
         <div className="space-y-8">
           <section>

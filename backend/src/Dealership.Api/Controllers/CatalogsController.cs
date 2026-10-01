@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Dealership.Api.Controllers;
 
-[ApiController, ApiVersion(1), Route("api/v{version:apiVersion}/inventory"), Authorize(Roles = "InventoryManager,Manager,Administrator")]
+[ApiController, ApiVersion(1), Route("api/v{version:apiVersion}/inventory"), Authorize(Policy = "Staff", Roles = "InventoryManager,Manager,Administrator")]
 public sealed class CatalogsController(DealershipDbContext db) : ControllerBase
 {
     [HttpGet("branches")] public async Task<ActionResult> Branches(CancellationToken ct) => Ok(await db.Branches.AsNoTracking().OrderBy(x => x.Name).ToListAsync(ct));

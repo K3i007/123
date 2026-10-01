@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Dealership.Api.Controllers;
 
-[ApiController, ApiVersion(1), Route("api/v{version:apiVersion}/inventory"), Authorize]
+[ApiController, ApiVersion(1), Route("api/v{version:apiVersion}/inventory"), Authorize(Policy = "Staff")]
 public sealed class InventoryController(DealershipDbContext db, ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet("vehicles"), Authorize(Roles = "InventoryManager,Manager,Administrator,Salesperson")]

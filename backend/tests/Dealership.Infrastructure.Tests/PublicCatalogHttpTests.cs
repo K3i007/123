@@ -122,16 +122,32 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>();
+
+        var make = new Make { Name = $"Migration Test Make {Guid.NewGuid():N}" };
+        var model = new Model { Make = make, Name = "Test" };
+        var branch = new Branch { Name = $"Migration Test Branch {Guid.NewGuid():N}", Address = "Test", Phones = "[]", Hours = "{}" };
+        var user = await db.Users.FirstAsync();
+        var vehicle = new Vehicle { Make = make, Model = model, Branch = branch, CreatedById = user.Id, Status = VehicleStatus.Published, Year = 2024, Mileage = 0, Price = 1000, Currency = "MXN", Drivetrain = "Test", Fuel = "Test", Transmission = "Test", BodyStyle = "Test", CustomFields = "{}" };
+        
+        vehicle.PublishedAt = null;
+        db.AddRange(make, model, branch, vehicle);
+        await db.SaveChangesAsync();
+
         var migration = new Dealership.Infrastructure.Migrations.AddVehiclePublishedAt();
         var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
         typeof(Dealership.Infrastructure.Migrations.AddVehiclePublishedAt)
             .GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(migration, [builder]);
         var backfill = Assert.Single(builder.Operations.OfType<SqlOperation>());
-        Assert.Contains("UPDATE \"Vehicles\" SET \"PublishedAt\" = \"CreatedAt\" WHERE \"Status\" = 5", backfill.Sql, StringComparison.Ordinal);
 
-        var missingPublicationDates = await db.Vehicles.CountAsync(x => x.Status == VehicleStatus.Published && x.PublishedAt == null);
-        Assert.Equal(0, missingPublicationDates);
+        await db.Database.ExecuteSqlRawAsync(backfill.Sql);
+
+        var updated = await db.Vehicles.SingleAsync(x => x.Id == vehicle.Id);
+        Assert.NotNull(updated.PublishedAt);
+        Assert.Equal(updated.CreatedAt, updated.PublishedAt);
+
+        db.Vehicles.Remove(updated);
+        await db.SaveChangesAsync();
     }
 
     [Fact]
