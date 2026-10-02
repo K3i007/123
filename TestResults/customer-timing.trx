@@ -1,0 +1,62 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="22072af1-4bfe-4398-bc11-d0795954b4b8" name="quepu@ENTER501LEO 2026-10-01 10:18:16" runUser="ENTER501LEO\quepu" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-01T10:18:17.0145891-06:00" queuing="2026-10-01T10:18:17.0145898-06:00" start="2026-10-01T10:16:25.6130369-06:00" finish="2026-10-01T10:18:17.0641431-06:00" />
+  <TestSettings name="default" id="df3da576-2bea-4017-b222-ecf632464348">
+    <Deployment runDeploymentRoot="quepu_ENTER501LEO_2026-10-01_10_18_16" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="9f15c240-50a7-4e7b-a41e-226d9c064c60" testId="b11f1c84-0efc-1b20-c521-10ecd6b12f14" testName="Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance" computerName="ENTER501LEO" duration="00:01:49.5991793" startTime="2026-10-01T10:18:16.5920193-06:00" endTime="2026-10-01T10:18:16.5926509-06:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="9f15c240-50a7-4e7b-a41e-226d9c064c60">
+      <Output>
+        <StdOut>login existing=589.0ms unknown=609.9ms&#xD;
+register existing=612.1ms new=661.6ms&#xD;
+reset existing=9.1ms unknown=1.5ms</StdOut>
+        <ErrorInfo>
+          <Message>Median response times diverged by 83.0 %; maximum is 50%.</Message>
+          <StackTrace>   at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.AssertWithinRelativeTolerance(Double left, Double right) in C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs:line 79&#xD;
+   at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance() in C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs:line 52&#xD;
+   at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance() in C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs:line 62&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance" storage="c:\users\quepu\downloads\concesionaria\backend\tests\dealership.infrastructure.tests\bin\debug\net8.0\dealership.infrastructure.tests.dll" id="b11f1c84-0efc-1b20-c521-10ecd6b12f14">
+      <Execution id="9f15c240-50a7-4e7b-a41e-226d9c064c60" />
+      <TestMethod codeBase="C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\bin\Debug\net8.0\Dealership.Infrastructure.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests" name="Server_side_medians_discard_warmup_and_stay_within_tolerance" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="b11f1c84-0efc-1b20-c521-10ecd6b12f14" executionId="9f15c240-50a7-4e7b-a41e-226d9c064c60" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Resultados sin formato de lista" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="Todos los resultados cargados" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="1" executed="1" passed="0" failed="1" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 8.0.31)&#xD;
+[xUnit.net 00:00:00.24]   Discovering: Dealership.Infrastructure.Tests&#xD;
+[xUnit.net 00:00:00.37]   Discovered:  Dealership.Infrastructure.Tests&#xD;
+[xUnit.net 00:00:00.38]   Starting:    Dealership.Infrastructure.Tests&#xD;
+[xUnit.net 00:01:50.12]       Median response times diverged by 83.0 %; maximum is 50%.&#xD;
+[xUnit.net 00:01:50.12]       Stack Trace:&#xD;
+[xUnit.net 00:01:50.13]         C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs(79,0): at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.AssertWithinRelativeTolerance(Double left, Double right)&#xD;
+[xUnit.net 00:01:50.13]         C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs(52,0): at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance()&#xD;
+[xUnit.net 00:01:50.13]         C:\Users\quepu\Downloads\concesionaria\backend\tests\Dealership.Infrastructure.Tests\CustomerTimingPerformanceTests.cs(62,0): at Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance()&#xD;
+[xUnit.net 00:01:50.13]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:01:50.13]       Output:&#xD;
+[xUnit.net 00:01:50.13]         login existing=589.0ms unknown=609.9ms&#xD;
+[xUnit.net 00:01:50.13]         register existing=612.1ms new=661.6ms&#xD;
+[xUnit.net 00:01:50.13]         reset existing=9.1ms unknown=1.5ms&#xD;
+[xUnit.net 00:01:50.16]   Finished:    Dealership.Infrastructure.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="ENTER501LEO" outcome="Error" timestamp="2026-10-01T10:18:16.5835264-06:00">
+        <Text>[xUnit.net 00:01:50.12]     Dealership.Infrastructure.Tests.CustomerTimingPerformanceTests.Server_side_medians_discard_warmup_and_stay_within_tolerance [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

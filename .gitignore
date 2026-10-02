@@ -1,19 +1,34 @@
+# Environment / secrets
 .env
-.env.local
-*.env
-*.log
-*.binlog
+.env.*
+!.env.example
+
+# .NET
 **/bin/
 **/obj/
-**/TestResults/
-**/node_modules/
+backend/TestResults/
+
+# Node / Next.js
+frontend/node_modules/
 frontend/.next/
 frontend/coverage/
 frontend/test-results/
-*_stats.txt
-*_output.txt
-tests-output.txt
-validation_results*.txt
-sequence_tests.txt
-security_output.txt
-clear_db.cs
+
+# Logs
+*.log
+*.stderr.log
+*.stdout.log
+
+# Build artifacts
+*.binlog
+
+# PostgreSQL backups
+*.dump
+*.backup
+backups/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
