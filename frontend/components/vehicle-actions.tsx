@@ -41,6 +41,7 @@ export function VehicleActions({ vehicleId }: { vehicleId: string }) {
       localStorage.setItem(favoritesKey, JSON.stringify(next ? [...new Set([...ids, vehicleId])].slice(0, 100) : ids.filter((id) => id !== vehicleId)));
     }
     setFavorite(next); setMessage(next ? "Vehículo guardado en favoritos." : "Vehículo eliminado de favoritos.");
+    window.dispatchEvent(new Event("concesionaria_counts_changed"));
   }
 
   async function toggleComparison() {
@@ -51,6 +52,7 @@ export function VehicleActions({ vehicleId }: { vehicleId: string }) {
       catch { setMessage("No fue posible actualizar la comparación."); return; }
     } else { localStorage.setItem(comparisonKey, JSON.stringify(next)); setComparison(next); }
     setMessage(next.includes(vehicleId) ? "Vehículo agregado a la comparación." : "Vehículo eliminado de la comparación.");
+    window.dispatchEvent(new Event("concesionaria_counts_changed"));
   }
 
   return <section aria-label="Acciones del vehículo" className="border-y border-slate-200 py-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={() => void toggleFavorite()} aria-pressed={favorite} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:border-brand">{favorite ? "Quitar favorito" : "Guardar favorito"}</button><button type="button" onClick={() => void toggleComparison()} aria-pressed={comparison.includes(vehicleId)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:border-brand">{comparison.includes(vehicleId) ? "Quitar de comparar" : "Comparar"}</button><Link href={comparison.length >= 2 ? `/comparar?ids=${comparison.join(",")}` : "/comparar"} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:border-brand">Ver comparación ({comparison.length})</Link></div>{message && <p role="status" className="mt-3 text-sm text-slate-700">{message}</p>}</section>;

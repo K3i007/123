@@ -1,8 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "./auth-provider";
+import { request } from "../lib/api";
+
+function useCounters(authenticated: boolean, accountType: string) {
+  const [favs, setFavs] = useState(0);
+  const [comps, setComps] = useState(0);
+
+  useEffect(() => {
+    function load() {
+      if (authenticated && accountType === "Customer") {
+        request<{ vehicleIds: string[] }>("/customers/favorites").then(d => setFavs(d.vehicleIds.length)).catch(() => {});
+        request<{ vehicleIds: string[] }>("/customers/comparison").then(d => setComps(d.vehicleIds.length)).catch(() => {});
+      } else {
+        try { setFavs((JSON.parse(localStorage.getItem("guest_favorite_vehicle_ids") ?? "[]")).length); } catch {}
+        try { setComps((JSON.parse(localStorage.getItem("guest_comparison_vehicle_ids") ?? "[]")).length); } catch {}
+      }
+    }
+    load();
+    window.addEventListener("concesionaria_counts_changed", load);
+    return () => window.removeEventListener("concesionaria_counts_changed", load);
+  }, [authenticated, accountType]);
+
+  return { favs, comps };
+}
 
 export function PublicHeader() {
   const { authenticated, roles, logout } = useAuth();
@@ -63,7 +86,7 @@ export function PublicHeader() {
         <div className="hidden md:flex items-center gap-3">
           <Link
             href="/comparar"
-            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
+            className="flex items-center gap-1 rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
             aria-label="Comparar vehículos"
             title="Comparar vehículos"
           >
@@ -71,7 +94,7 @@ export function PublicHeader() {
           </Link>
           <Link
             href="/perfil"
-            className="rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
+            className="flex items-center gap-1 rounded-full p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
             aria-label="Favoritos"
             title="Favoritos"
           >

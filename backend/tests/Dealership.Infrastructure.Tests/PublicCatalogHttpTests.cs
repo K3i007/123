@@ -17,7 +17,7 @@ namespace Dealership.Infrastructure.Tests;
 public sealed class PublicCatalogHttpCollection;
 
 [Collection("Public catalog HTTP")]
-public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factory) : IAsyncLifetime, IClassFixture<WebApplicationFactory<Program>>
+public sealed class PublicCatalogHttpTests(TestFactory factory) : IAsyncLifetime, IClassFixture<TestFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
     private Guid _makeId;
@@ -127,11 +127,12 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
         var model = new Model { Make = make, Name = "Test" };
         var branch = new Branch { Name = $"Migration Test Branch {Guid.NewGuid():N}", Address = "Test", Phones = "[]", Hours = "{}" };
         var user = await db.Users.FirstAsync();
-        var vehicle = new Vehicle { Make = make, Model = model, Branch = branch, CreatedById = user.Id, Status = VehicleStatus.Published, Year = 2024, Mileage = 0, Price = 1000, Currency = "MXN", Drivetrain = "Test", Fuel = "Test", Transmission = "Test", BodyStyle = "Test", CustomFields = "{}" };
+        var vehicle = new Vehicle { Make = make, Model = model, Branch = branch, CreatedById = user.Id, Year = 2024, Mileage = 0, Price = 1000, Currency = "MXN", Drivetrain = "Test", Fuel = "Test", Transmission = "Test", BodyStyle = "Test", CustomFields = "{}" };
         
-        vehicle.PublishedAt = null;
         db.AddRange(make, model, branch, vehicle);
         await db.SaveChangesAsync();
+
+        await db.Database.ExecuteSqlAsync($"UPDATE \"Vehicles\" SET \"Status\" = 5, \"PublishedAt\" = NULL WHERE \"Id\" = {vehicle.Id}");
 
         var migration = new Dealership.Infrastructure.Migrations.AddVehiclePublishedAt();
         var builder = new MigrationBuilder("Npgsql.EntityFrameworkCore.PostgreSQL");
@@ -142,7 +143,7 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
 
         await db.Database.ExecuteSqlRawAsync(backfill.Sql);
 
-        var updated = await db.Vehicles.SingleAsync(x => x.Id == vehicle.Id);
+        var updated = await db.Vehicles.AsNoTracking().SingleAsync(x => x.Id == vehicle.Id);
         Assert.NotNull(updated.PublishedAt);
         Assert.Equal(updated.CreatedAt, updated.PublishedAt);
 
@@ -156,6 +157,11 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
         var endpoints = new[]
         {
             "/api/v1/public/vehicles?pageSize=12",
+            "/api/v1/public/vehicles?q=nissan",
+            "/api/v1/public/vehicles?q=NISSAN",
+            "/api/v1/public/vehicles?q=nis",
+            "/api/v1/public/vehicles?q=%25",
+            "/api/v1/public/vehicles?q=_",
             "/api/v1/public/vehicles/filters",
             "/api/v1/public/vehicles/featured",
             "/api/v1/public/vehicles/recent",
@@ -190,7 +196,7 @@ public sealed class PublicCatalogHttpTests(WebApplicationFactory<Program> factor
         {
             Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
             Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
-            Assert.Equal("public, max-age=45", response.Headers.CacheControl?.ToString());
+            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
             bodies.Add(await response.Content.ReadAsStringAsync());
         }
         Assert.All(bodies, body => Assert.Equal(bodies[0], body));

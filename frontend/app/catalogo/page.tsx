@@ -3,9 +3,16 @@ import { CatalogClient, type FilterOptions, type VehiclePagedResult } from "./ca
 const backend = process.env.BACKEND_URL ?? "http://localhost:5080";
 
 async function fetchCatalog(path: string) {
-  const response = await fetch(`${backend}/api/v1/public/${path}`, { next: { revalidate: 45 } });
-  if (!response.ok) throw new Error(`Public catalog returned ${response.status}`);
-  return response.json();
+  try {
+    const response = await fetch(`${backend}/api/v1/public/${path}`, { next: { revalidate: 45 } });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!response.ok) throw new Error(response.status === 429 ? `El catálogo está temporalmente limitado.${response.headers.get("retry-after") ? ` Reintenta en ${response.headers.get("retry-after")} segundos.` : ""}` : response.status >= 500 ? "El catálogo no está disponible temporalmente." : `El catálogo respondió ${response.status}.`);
+    if (!contentType.includes("application/json")) throw new Error("El catálogo devolvió una respuesta inválida.");
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error && error.message !== "fetch failed") throw error;
+    throw new Error("No se pudo conectar con el catálogo.");
+  }
 }
 
 export default async function CatalogoPage({

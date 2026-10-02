@@ -107,8 +107,7 @@ public sealed class CustomerAccountService(DealershipDbContext db, IConfiguratio
             user.PasswordHash = passwords.Hash(user, password);
             await db.OneTimeTokens.Where(x => x.UserId == user.Id && x.Purpose == OneTimeTokenPurpose.PasswordReset && x.UsedAt == null)
                 .ExecuteUpdateAsync(x => x.SetProperty(t => t.UsedAt, DateTimeOffset.UtcNow), cancellationToken);
-            await db.RefreshTokens.Where(x => x.UserId == user.Id && x.RevokedAt == null)
-                .ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
+            await RevokeRefreshTokensAsync(x => x.UserId == user.Id && x.RevokedAt == null, cancellationToken);
         }, cancellationToken);
     }
 
@@ -145,7 +144,7 @@ public sealed class CustomerAccountService(DealershipDbContext db, IConfiguratio
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId && x.AccountType == AccountType.Customer, cancellationToken);
         if (user is null || !passwords.Verify(user, user.PasswordHash, currentPassword)) return false;
         user.PasswordHash = passwords.Hash(user, newPassword);
-        await db.RefreshTokens.Where(x => x.UserId == userId && x.RevokedAt == null).ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
+        await RevokeRefreshTokensAsync(x => x.UserId == userId && x.RevokedAt == null, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
@@ -157,8 +156,8 @@ public sealed class CustomerAccountService(DealershipDbContext db, IConfiguratio
         db.FavoriteVehicles.RemoveRange(db.FavoriteVehicles.Where(x => x.UserId == userId));
         db.SavedComparisonVehicles.RemoveRange(db.SavedComparisonVehicles.Where(x => x.UserId == userId));
         db.OneTimeTokens.RemoveRange(db.OneTimeTokens.Where(x => x.UserId == userId));
-        await db.RefreshTokens.Where(x => x.UserId == userId && x.RevokedAt == null).ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
-        user.Email = $"deleted+{user.Id:N}@invalid.local";
+        await RevokeRefreshTokensAsync(x => x.UserId == userId && x.RevokedAt == null, cancellationToken);
+        user.Email = $"deleted-{user.Id:N}@deleted.invalid";
         user.DisplayName = null; user.Phone = null; user.PasswordHash = passwords.Hash(user, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))); user.EmailVerified = false; user.IsActive = false; user.MarketingConsent = false; user.PrivacyPolicyVersion = null; user.PrivacyAcceptedAt = null;
         await db.SaveChangesAsync(cancellationToken);
         return true;
@@ -170,14 +169,12 @@ public sealed class CustomerAccountService(DealershipDbContext db, IConfiguratio
 
     public async Task<bool> RevokeSessionAsync(Guid userId, Guid sessionId, CancellationToken cancellationToken)
     {
-        var count = await db.RefreshTokens.Where(x => x.Id == sessionId && x.UserId == userId && x.RevokedAt == null)
-            .ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
+        var count = await RevokeRefreshTokensAsync(x => x.Id == sessionId && x.UserId == userId && x.RevokedAt == null, cancellationToken);
         return count == 1;
     }
 
     public Task<int> RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken) =>
-        db.RefreshTokens.Where(x => x.UserId == userId && x.RevokedAt == null)
-            .ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
+        RevokeRefreshTokensAsync(x => x.UserId == userId && x.RevokedAt == null, cancellationToken);
 
     public async Task<IReadOnlyCollection<Guid>> MergeFavoritesAsync(Guid userId, IReadOnlyCollection<Guid> vehicleIds, CancellationToken cancellationToken)
     {
@@ -268,6 +265,15 @@ public sealed class CustomerAccountService(DealershipDbContext db, IConfiguratio
     private static string NormalizeEmail(string value) => value.Trim().ToLowerInvariant();
     private static string? NormalizePhone(string? value) => string.IsNullOrWhiteSpace(value) ? null : new string(value.Where(char.IsDigit).ToArray());
     private string Hash(string value) => Convert.ToHexString(HMACSHA256.HashData(hashKey, Encoding.UTF8.GetBytes(value)));
+    private async Task<int> RevokeRefreshTokensAsync(System.Linq.Expressions.Expression<Func<RefreshToken, bool>> predicate, CancellationToken cancellationToken)
+    {
+        if (db.Database.IsRelational())
+            return await db.RefreshTokens.Where(predicate).ExecuteUpdateAsync(x => x.SetProperty(t => t.RevokedAt, DateTimeOffset.UtcNow), cancellationToken);
+        var tokens = await db.RefreshTokens.Where(predicate).ToListAsync(cancellationToken);
+        foreach (var token in tokens) token.RevokedAt = DateTimeOffset.UtcNow;
+        if (tokens.Count > 0) await db.SaveChangesAsync(cancellationToken);
+        return tokens.Count;
+    }
     private Task QueueEmailAsync(string recipient, string subject, string body, CancellationToken cancellationToken) =>
         backgroundTasks is null
             ? emailSender.SendAsync(recipient, subject, body, cancellationToken)

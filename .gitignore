@@ -10,3 +10,10 @@
 frontend/.next/
 frontend/coverage/
 frontend/test-results/
+*_stats.txt
+*_output.txt
+tests-output.txt
+validation_results*.txt
+sequence_tests.txt
+security_output.txt
+clear_db.cs

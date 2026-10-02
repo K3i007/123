@@ -15,17 +15,19 @@ async function forward(request: Request, { params }: { params: Promise<{ path: s
   const ifMatch = request.headers.get("if-match");
   if (ifMatch) headers["If-Match"] = ifMatch;
 
-  const response = await fetch(targetUrl, {
-    method: request.method,
-    headers,
-    body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(targetUrl, { method: request.method, headers, body: request.method === "GET" || request.method === "HEAD" ? undefined : await request.text(), cache: "no-store" });
+  } catch {
+    return NextResponse.json({ type: "about:blank", title: "Servicio no disponible.", status: 503, detail: "No se pudo conectar con la API." }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
 
   const responseHeaders = new Headers();
   responseHeaders.set("Content-Type", response.headers.get("Content-Type") ?? "application/json");
   const cacheControl = response.headers.get("Cache-Control");
   if (cacheControl) responseHeaders.set("Cache-Control", cacheControl);
+  const retryAfter = response.headers.get("Retry-After");
+  if (retryAfter) responseHeaders.set("Retry-After", retryAfter);
 
   return new NextResponse(response.body, {
     status: response.status,

@@ -118,7 +118,9 @@ public sealed class CustomerController(ICustomerAccountService accounts, IAuthen
     public async Task<ActionResult<object>> MergeFavorites(VehicleIdsRequest request, CancellationToken cancellationToken)
     {
         if (!await accounts.IsEmailVerifiedAsync(UserId(), cancellationToken)) return EmailNotVerified();
-        return Ok(new { vehicleIds = await accounts.MergeFavoritesAsync(UserId(), request.VehicleIds ?? [], cancellationToken) });
+        var before = (await accounts.GetFavoriteIdsAsync(UserId(), cancellationToken)).Count;
+        var vehicleIds = await accounts.MergeFavoritesAsync(UserId(), request.VehicleIds ?? [], cancellationToken);
+        return Ok(new { vehicleIds, addedCount = Math.Max(0, vehicleIds.Count - before) });
     }
 
     [HttpPut("favorites/{vehicleId:guid}"), Authorize(Policy = "Customer")]

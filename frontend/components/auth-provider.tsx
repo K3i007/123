@@ -54,7 +54,50 @@ export function AuthProvider({ children }: Readonly<{ children: React.ReactNode 
           body: JSON.stringify({ email, password }),
         });
         if (!response.ok) throw new Error("No fue posible iniciar sesión.");
-        save(((await response.json()) as { accessToken: string }).accessToken);
+        const data = await response.json() as { accessToken: string };
+        save(data.accessToken);
+
+        // Attempt merge
+        try {
+          const favorites = JSON.parse(localStorage.getItem("guest_favorite_vehicle_ids") ?? "[]");
+          const comparison = JSON.parse(localStorage.getItem("guest_comparison_vehicle_ids") ?? "[]");
+          let message = "";
+          if (Array.isArray(favorites) && favorites.length > 0) {
+            const fRes = await fetch("/api/proxy/v1/customers/favorites/merge", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${data.accessToken}` },
+              body: JSON.stringify({ vehicleIds: favorites })
+            });
+            if (fRes.ok) {
+              const body = await fRes.json();
+              localStorage.removeItem("guest_favorite_vehicle_ids");
+              message += `Se añadieron ${body.addedCount || 0} favoritos a tu cuenta. `;
+            } else if (fRes.status === 403) {
+              const body = await fRes.json();
+              if (body.extensions?.code === "email_not_verified") {
+                 message += "Para guardar tus favoritos, ve a tu perfil y verifica tu correo. ";
+              }
+            }
+          }
+          if (Array.isArray(comparison) && comparison.length > 0) {
+            const cRes = await fetch("/api/proxy/v1/customers/comparison", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${data.accessToken}` },
+              body: JSON.stringify({ vehicleIds: comparison })
+            });
+            if (cRes.ok) {
+              localStorage.removeItem("guest_comparison_vehicle_ids");
+              message += "Tus comparaciones se fusionaron con tu cuenta.";
+            }
+          }
+          if (message) {
+            // Usually we use a toast library, for simplicity we alert or dispatch event
+            window.dispatchEvent(new CustomEvent("toast_notification", { detail: message }));
+            alert(message);
+          }
+        } catch {
+          // Ignore parse errors
+        }
       },
     }),
     [ready, token, roles, accountType],

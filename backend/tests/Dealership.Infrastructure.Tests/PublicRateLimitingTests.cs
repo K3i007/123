@@ -5,13 +5,22 @@ using Xunit;
 
 namespace Dealership.Infrastructure.Tests;
 
-public sealed class PublicRateLimitingTests : IClassFixture<PublicRateLimitingTests.TestFactory>
+public sealed class PublicRateLimitingTests : IClassFixture<PublicRateLimitingTests.LocalTestFactory>
 {
     private readonly HttpClient _client;
 
-    public PublicRateLimitingTests(TestFactory factory)
+    public PublicRateLimitingTests(LocalTestFactory factory)
     {
         _client = factory.CreateClient();
+    }
+
+    public sealed class LocalTestFactory : WebApplicationFactory<Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+            builder.UseSetting("RateLimiting:PublicCatalogPermitLimit", "3");
+        }
     }
 
     [Fact]
@@ -37,12 +46,4 @@ public sealed class PublicRateLimitingTests : IClassFixture<PublicRateLimitingTe
         return await _client.SendAsync(request);
     }
 
-    public sealed class TestFactory : WebApplicationFactory<Program>
-    {
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment("Testing");
-            builder.UseSetting("RateLimiting:PublicCatalogPermitLimit", "3");
-        }
-    }
 }

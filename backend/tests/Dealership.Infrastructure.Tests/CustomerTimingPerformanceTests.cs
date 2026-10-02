@@ -15,6 +15,11 @@ public sealed class CustomerTimingPerformanceTests(ITestOutputHelper output)
         var passwords = new PasswordWorkService();
         var user = new User();
         var realHash = passwords.Hash(user, "Existing-password-123");
+        
+        output.WriteLine($"[Config] Configured Iterations: {passwords.IterationCount}");
+        output.WriteLine($"[Hash] Real Hash Iterations: {passwords.GetIterationCount(realHash)}");
+        output.WriteLine($"[Hash] Unknown Hash Iterations: {passwords.GetIterationCount(passwords.UnknownHashForTesting)}");
+
         var loginExisting = Median(() => passwords.Verify(user, realHash, "wrong-password-123"));
         var loginUnknown = Median(() => passwords.VerifyUnknown("wrong-password-123"));
         var registerExisting = Median(() => passwords.Hash(new User(), "New-password-123"));

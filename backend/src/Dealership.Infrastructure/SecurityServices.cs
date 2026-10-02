@@ -37,14 +37,22 @@ public sealed class AccountRateLimitService(DealershipDbContext db, IConfigurati
     {
         var hash = Convert.ToHexString(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(normalizedEmail)));
         var now = DateTimeOffset.UtcNow;
-        await db.AccountRateLimits.Where(x => x.ExpiresAt <= now).ExecuteDeleteAsync(cancellationToken);
+        var expired = db.AccountRateLimits.Where(x => x.ExpiresAt <= now);
+        if (db.Database.IsRelational()) await expired.ExecuteDeleteAsync(cancellationToken);
+        else
+        {
+            db.AccountRateLimits.RemoveRange(await expired.ToListAsync(cancellationToken));
+            await db.SaveChangesAsync(cancellationToken);
+        }
         // This table is deliberately a short-lived cache, not an event ledger. Prune before
         // accepting a new account key so an attacker cannot retain an unbounded key space.
         var activeCounters = await db.AccountRateLimits.CountAsync(cancellationToken);
         if (activeCounters >= MaximumActiveCounters)
         {
             var oldest = await db.AccountRateLimits.OrderBy(x => x.ExpiresAt).Take(100).Select(x => x.Id).ToListAsync(cancellationToken);
-            await db.AccountRateLimits.Where(x => oldest.Contains(x.Id)).ExecuteDeleteAsync(cancellationToken);
+            var oldestCounters = db.AccountRateLimits.Where(x => oldest.Contains(x.Id));
+            if (db.Database.IsRelational()) await oldestCounters.ExecuteDeleteAsync(cancellationToken);
+            else db.AccountRateLimits.RemoveRange(await oldestCounters.ToListAsync(cancellationToken));
         }
         var entry = await db.AccountRateLimits.SingleOrDefaultAsync(x => x.Purpose == purpose && x.AccountHash == hash, cancellationToken);
         var attempts = 1;
@@ -60,7 +68,12 @@ public sealed class AccountRateLimitService(DealershipDbContext db, IConfigurati
         await db.SaveChangesAsync(cancellationToken);
         // A small, capped delay is applied before the generic response for every account hash.
         // It increases friction without leaving a durable account lockout state.
-        if (attempts > 1 && maximumDelayMilliseconds > 0) await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(200 * (attempts - 1), maximumDelayMilliseconds)), cancellationToken);
+        if (attempts > 1 && maximumDelayMilliseconds > 0)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Min(200 * (attempts - 1), maximumDelayMilliseconds)), cancellationToken);
+        }
+        
+        if (purpose == "login") return true;
         return attempts <= permitLimit;
     }
 }

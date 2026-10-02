@@ -63,7 +63,7 @@ public sealed class DealershipDbContext(DbContextOptions<DealershipDbContext> op
 public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser, ICorrelationContext correlation) : SaveChangesInterceptor
 {
     private static readonly HashSet<string> SensitiveProperties = new(StringComparer.OrdinalIgnoreCase) { "PasswordHash", "TokenHash", "RefreshToken", "AccessToken", "Password", "Email", "DisplayName", "Phone", "PrivacyPolicyVersion" };
-    private static readonly HashSet<string> SensitiveEntities = new(StringComparer.Ordinal) { nameof(User), nameof(RefreshToken), nameof(OneTimeToken), nameof(SecurityEvent) };
+    private static readonly HashSet<string> SensitiveEntities = new(StringComparer.Ordinal) { nameof(RefreshToken), nameof(OneTimeToken), nameof(SecurityEvent) };
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {

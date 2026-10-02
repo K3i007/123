@@ -69,7 +69,7 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("customer-register", context => RateLimitPartition.GetFixedWindowLimiter($"customer-register:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
     options.AddPolicy("customer-reset", context => RateLimitPartition.GetFixedWindowLimiter($"customer-reset:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
     options.AddPolicy("customer-resend", context => RateLimitPartition.GetFixedWindowLimiter($"customer-resend:{context.Connection.RemoteIpAddress}", _ => new FixedWindowRateLimiterOptions { PermitLimit = customerIpLimit, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
-    var publicLimit = builder.Configuration.GetValue<int>("RateLimiting:PublicCatalogPermitLimit", 100);
+    var publicLimit = builder.Configuration.GetValue<int>("RateLimiting:PublicCatalogPermitLimit", builder.Environment.IsDevelopment() ? 1_000 : 100);
     options.AddPolicy("public-catalog", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = publicLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0, AutoReplenishment = true }));
@@ -86,12 +86,24 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
     options.KnownNetworks.Clear();
     foreach (var address in trustedProxyAddresses) options.KnownProxies.Add(address);
+    if (builder.Environment.IsEnvironment("Testing"))
+    {
+        options.KnownProxies.Clear();
+    }
 });
-builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy.WithOrigins(builder.Configuration["Frontend:Origin"] ?? "http://localhost:3000").AllowAnyHeader().AllowAnyMethod()));
+var allowedOrigins = builder.Configuration.GetSection("Frontend:Origins").Get<string[]>() ?? [];
+if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing") && allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("Security requires Frontend:Origins outside Development.");
+}
+if (builder.Environment.IsDevelopment() && allowedOrigins.Length == 0) allowedOrigins = ["http://localhost:3000"];
+
+builder.Services.AddCors(options => options.AddPolicy("frontend", policy => policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddHealthChecks().AddDbContextCheck<DealershipDbContext>();
 var app = builder.Build();
+
 app.Use(async (context, next) => { var correlation = context.Request.Headers["X-Correlation-ID"].FirstOrDefault() ?? Guid.NewGuid().ToString("N"); context.Items["CorrelationId"] = correlation; context.Response.Headers["X-Correlation-ID"] = correlation; await next(); });
-app.UseExceptionHandler(errorApp => errorApp.Run(async context => { var correlation = context.Items["CorrelationId"]?.ToString(); var problem = new ProblemDetails { Status = StatusCodes.Status500InternalServerError, Title = "Ocurrió un error inesperado.", Detail = "Intenta nuevamente o contacta a soporte con el identificador de seguimiento.", Extensions = { ["correlationId"] = correlation } }; await Results.Problem(problem.Detail, statusCode: problem.Status, title: problem.Title, extensions: problem.Extensions).ExecuteAsync(context); }));
+if (!app.Environment.IsEnvironment("Testing")) { app.UseExceptionHandler(errorApp => errorApp.Run(async context => { var correlation = context.Items["CorrelationId"]?.ToString(); var problem = new ProblemDetails { Status = StatusCodes.Status500InternalServerError, Title = "OcurriÃ³ un error inesperado.", Detail = "Intenta nuevamente o contacta a soporte con el identificador de seguimiento.", Extensions = { ["correlationId"] = correlation } }; await Results.Problem(problem.Detail, statusCode: problem.Status, title: problem.Title, extensions: problem.Extensions).ExecuteAsync(context); })); }
 app.UseHsts();
 app.Use(async (context, next) =>
 {
@@ -103,10 +115,32 @@ app.Use(async (context, next) =>
     await next();
 });
 app.UseForwardedHeaders();
-app.Use(async (context, next) => { context.Response.Headers.Append("X-Content-Type-Options", "nosniff"); context.Response.Headers.Append("X-Frame-Options", "DENY"); context.Response.Headers.Append("Referrer-Policy", "no-referrer"); await next(); });
+app.Use(async (context, next) => { 
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff"); 
+    context.Response.Headers.Append("X-Frame-Options", "DENY"); 
+    context.Response.Headers.Append("Referrer-Policy", "no-referrer"); 
+    
+    // CSRF protection for mutations
+    if (HttpMethods.IsPost(context.Request.Method) || HttpMethods.IsPut(context.Request.Method) || HttpMethods.IsDelete(context.Request.Method)) {
+        var origin = context.Request.Headers.Origin.FirstOrDefault();
+        if (!string.IsNullOrEmpty(origin) && !allowedOrigins.Contains(origin)) {
+            context.Response.StatusCode = 403;
+            await context.Response.WriteAsync("Cross-site mutation rejected.");
+            return;
+        }
+    }
+    
+    await next(); 
+});
 app.UseHttpsRedirection(); app.UseCors("frontend"); app.UseRateLimiter(); app.UseAuthentication(); app.UseAuthorization();
 app.UseSwagger(); app.UseSwaggerUI(); app.MapHealthChecks("/health"); app.MapControllers();
-using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>(); await db.Database.MigrateAsync(); await scope.ServiceProvider.GetRequiredService<DevelopmentDataSeeder>().SeedAsync(CancellationToken.None); }
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>();
+    if (db.Database.IsRelational()) await db.Database.MigrateAsync();
+    else await db.Database.EnsureCreatedAsync();
+    await scope.ServiceProvider.GetRequiredService<DevelopmentDataSeeder>().SeedAsync(CancellationToken.None);
+}
 app.Run();
 
 public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser { public string? Id => accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? accessor.HttpContext?.User.FindFirstValue("sub"); }
