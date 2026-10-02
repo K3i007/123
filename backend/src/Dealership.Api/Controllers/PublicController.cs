@@ -1,4 +1,4 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
 using Dealership.Application;
 using Dealership.Domain;
 using Dealership.Infrastructure;
@@ -50,12 +50,13 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
             .AsNoTracking()
             .Where(x => x.Status == VehicleStatus.Published && !x.IsDeleted);
 
+        var isNpgsql = db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
+
         // Keyword Search strategy: Resolve IDs from Makes, Models, Variants
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var term = query.Q.Trim();
             var pattern = $"%{EscapeLike(term)}%";
-            var isNpgsql = db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
 
             List<Guid> matchedMakeIds;
             List<Guid> matchedModelIds;
@@ -116,7 +117,11 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
             {
                 if (!definitions.TryGetValue(filter.Key, out var definition) || !TryBuildCustomFieldFilter(definition, filter.Value, out var filterJson))
                     return BadRequest(new ProblemDetails { Title = "Filtro configurable inválido.", Detail = $"El filtro '{filter.Key}' no es válido.", Status = StatusCodes.Status400BadRequest });
-                baseQuery = baseQuery.Where(x => EF.Functions.JsonContains(x.CustomFields, filterJson));
+                if (isNpgsql)
+                    baseQuery = baseQuery.Where(x => EF.Functions.JsonContains(x.CustomFields, filterJson));
+                else
+                    // InMemory fallback: client-side JSON substring match (tests only; production always uses Npgsql)
+                    baseQuery = baseQuery.Where(x => x.CustomFields.Contains(filterJson, StringComparison.Ordinal));
             }
         }
 
