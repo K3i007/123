@@ -106,13 +106,14 @@ public sealed class CustomerSecurityHttpTests(TestFactory factory) : IAsyncLifet
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>();
         var userIds = new[] { _customerA, _customerB, _staffUser };
-        db.FavoriteVehicles.RemoveRange(db.FavoriteVehicles.Where(x => userIds.Contains(x.UserId)));
-        db.SavedComparisonVehicles.RemoveRange(db.SavedComparisonVehicles.Where(x => userIds.Contains(x.UserId)));
-        db.OneTimeTokens.RemoveRange(db.OneTimeTokens.Where(x => userIds.Contains(x.UserId)));
-        db.RefreshTokens.RemoveRange(db.RefreshTokens.Where(x => userIds.Contains(x.UserId)));
-        db.Users.RemoveRange(db.Users.Where(x => userIds.Contains(x.Id)));
-        db.Vehicles.RemoveRange(db.Vehicles.Where(x => x.Id == _testVehicleId));
-        await db.SaveChangesAsync();
+        await db.FavoriteVehicles.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
+        await db.SavedComparisonVehicles.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
+        await db.OneTimeTokens.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
+        await db.RefreshTokens.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync();
+        await db.VehicleStatusHistories.Where(x => x.VehicleId == _testVehicleId).ExecuteDeleteAsync();
+        await db.VehiclePriceHistories.Where(x => x.VehicleId == _testVehicleId).ExecuteDeleteAsync();
+        await db.Vehicles.Where(x => x.Id == _testVehicleId).ExecuteDeleteAsync();
+        await db.Users.Where(x => userIds.Contains(x.Id)).ExecuteDeleteAsync();
     }
 
     private async Task<string> LoginAsync(string email, string password, bool isCustomer)
@@ -181,7 +182,7 @@ public sealed class CustomerSecurityHttpTests(TestFactory factory) : IAsyncLifet
         Assert.Equal(System.Net.HttpStatusCode.OK, getCompResB.StatusCode);
         Assert.Contains(_testVehicleId.ToString(), await getCompResB.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
 
-        var getCompReqA = new HttpRequestMessage(HttpMethod.Get, "/api/v1/customers/comparisons");
+        var getCompReqA = new HttpRequestMessage(HttpMethod.Get, "/api/v1/customers/comparison");
         getCompReqA.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _tokenA);
         var getCompResA = await _client.SendAsync(getCompReqA);
         var getCompStrA = await getCompResA.Content.ReadAsStringAsync();

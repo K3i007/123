@@ -31,9 +31,12 @@ public sealed class CustomerController(ICustomerAccountService accounts, IAuthen
     {
         if (!await AccountAllowedAsync("login", command.Email, cancellationToken)) return TooManyAttempts();
         var result = await authentication.LoginAsync(command, cancellationToken, AccountType.Customer);
-        return result is null
-            ? Unauthorized(new ProblemDetails { Title = "No fue posible iniciar sesión.", Detail = "Verifica tus datos o espera antes de intentarlo de nuevo." })
-            : Ok(result);
+        if (result is null)
+            return Unauthorized(new ProblemDetails { Title = "No fue posible iniciar sesión.", Detail = "Verifica tus datos o espera antes de intentarlo de nuevo." });
+        // Reset the per-email progressive-delay counter so a subsequent honest login
+        // does not inherit the delay from a previous burst of failed attempts.
+        await accountLimits.ResetAsync("login", command.Email.Trim().ToLowerInvariant(), cancellationToken);
+        return Ok(result);
     }
 
     [HttpPost("verify-email")]

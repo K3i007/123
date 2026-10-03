@@ -50,31 +50,15 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
             .AsNoTracking()
             .Where(x => x.Status == VehicleStatus.Published && !x.IsDeleted);
 
-        var isNpgsql = db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true;
-
-        // Keyword Search strategy: Resolve IDs from Makes, Models, Variants
+        // Keyword Search strategy: case-insensitive via Npgsql ILike (requires PostgreSQL provider)
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var term = query.Q.Trim();
             var pattern = $"%{EscapeLike(term)}%";
 
-            List<Guid> matchedMakeIds;
-            List<Guid> matchedModelIds;
-            List<Guid> matchedVariantIds;
-
-            if (isNpgsql)
-            {
-                matchedMakeIds = await db.Makes.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
-                matchedModelIds = await db.Models.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
-                matchedVariantIds = await db.Variants.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
-            }
-            else
-            {
-                var lower = term.ToLowerInvariant();
-                matchedMakeIds = await db.Makes.Where(x => !x.IsDeleted && x.Name.ToLower().Contains(lower)).Select(x => x.Id).ToListAsync(cancellationToken);
-                matchedModelIds = await db.Models.Where(x => !x.IsDeleted && x.Name.ToLower().Contains(lower)).Select(x => x.Id).ToListAsync(cancellationToken);
-                matchedVariantIds = await db.Variants.Where(x => !x.IsDeleted && x.Name.ToLower().Contains(lower)).Select(x => x.Id).ToListAsync(cancellationToken);
-            }
+            var matchedMakeIds = await db.Makes.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
+            var matchedModelIds = await db.Models.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
+            var matchedVariantIds = await db.Variants.Where(x => !x.IsDeleted && EF.Functions.ILike(x.Name, pattern, "\\")).Select(x => x.Id).ToListAsync(cancellationToken);
 
             if (matchedMakeIds.Count == 0 && matchedModelIds.Count == 0 && matchedVariantIds.Count == 0)
             {
@@ -117,11 +101,7 @@ public sealed class PublicController(DealershipDbContext db) : ControllerBase
             {
                 if (!definitions.TryGetValue(filter.Key, out var definition) || !TryBuildCustomFieldFilter(definition, filter.Value, out var filterJson))
                     return BadRequest(new ProblemDetails { Title = "Filtro configurable inválido.", Detail = $"El filtro '{filter.Key}' no es válido.", Status = StatusCodes.Status400BadRequest });
-                if (isNpgsql)
-                    baseQuery = baseQuery.Where(x => EF.Functions.JsonContains(x.CustomFields, filterJson));
-                else
-                    // InMemory fallback: client-side JSON substring match (tests only; production always uses Npgsql)
-                    baseQuery = baseQuery.Where(x => x.CustomFields.Contains(filterJson, StringComparison.Ordinal));
+                baseQuery = baseQuery.Where(x => EF.Functions.JsonContains(x.CustomFields, filterJson));
             }
         }
 

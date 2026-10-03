@@ -57,7 +57,19 @@ public interface IPasswordWorkService
 
 public interface IAccountRateLimitService
 {
+    /// <summary>
+    /// Records an attempt. Returns false when the per-account attempt limit is reached.
+    /// For the "login" purpose the return value is always true — the delay itself is the
+    /// friction mechanism, not a hard block.
+    /// </summary>
     Task<bool> AllowAsync(string purpose, string normalizedEmail, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes the rate-limit counter for the given purpose + email.
+    /// Call this after a successful login so the progressive delay resets to zero
+    /// and the account is not penalised on the next honest attempt.
+    /// </summary>
+    Task ResetAsync(string purpose, string normalizedEmail, CancellationToken cancellationToken);
 }
 
 public interface ICurrentUser { string? Id { get; } }

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using Dealership.Application;
 using Dealership.Domain;
@@ -16,8 +16,8 @@ public sealed class CustomerTokenPostgresTests
     [Fact]
     public async Task Verification_token_cannot_be_reused_sequentially_and_an_expired_token_is_rejected()
     {
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Default");
-        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        // PostgresGuard.Resolve() skips (or fails if REQUIRE_POSTGRES=true) when no DB is configured.
+        var connectionString = PostgresGuard.Resolve();
         var options = new DbContextOptionsBuilder<DealershipDbContext>().UseNpgsql(connectionString).Options;
         var configuration = TestConfiguration();
         var suffix = Guid.NewGuid().ToString("N");
@@ -50,8 +50,8 @@ public sealed class CustomerTokenPostgresTests
     [Fact]
     public async Task Successful_reset_invalidates_pending_reset_tokens_and_revokes_sessions()
     {
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Default");
-        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        // PostgresGuard.Resolve() skips (or fails if REQUIRE_POSTGRES=true) when no DB is configured.
+        var connectionString = PostgresGuard.Resolve();
         var options = new DbContextOptionsBuilder<DealershipDbContext>().UseNpgsql(connectionString).Options;
         var configuration = TestConfiguration();
         var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
@@ -91,8 +91,8 @@ public sealed class CustomerTokenPostgresTests
     [InlineData(OneTimeTokenPurpose.PasswordReset)]
     public async Task Same_one_time_token_allows_exactly_one_concurrent_consumer(OneTimeTokenPurpose purpose)
     {
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__Default");
-        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        // PostgresGuard.Resolve() skips (or fails if REQUIRE_POSTGRES=true) when no DB is configured.
+        var connectionString = PostgresGuard.Resolve();
         var options = new DbContextOptionsBuilder<DealershipDbContext>().UseNpgsql(connectionString).Options;
         var configuration = TestConfiguration();
         var suffix = Guid.NewGuid().ToString("N");

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Net.Http.Json;
 using Dealership.Infrastructure;
 using Dealership.Domain;
@@ -120,9 +120,6 @@ public sealed class PublicCatalogHttpTests(TestFactory factory) : IAsyncLifetime
     [Fact]
     public async Task Published_at_migration_backfills_existing_published_vehicles()
     {
-        await using var scopeCheck = factory.Services.CreateAsyncScope();
-        var dbCheck = scopeCheck.ServiceProvider.GetRequiredService<DealershipDbContext>();
-        if (!dbCheck.Database.IsRelational()) return; // Requires a relational provider (PostgreSQL)
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<DealershipDbContext>();
 
@@ -150,8 +147,13 @@ public sealed class PublicCatalogHttpTests(TestFactory factory) : IAsyncLifetime
         Assert.NotNull(updated.PublishedAt);
         Assert.Equal(updated.CreatedAt, updated.PublishedAt);
 
-        db.Vehicles.Remove(updated);
-        await db.SaveChangesAsync();
+        // Cleanup: delete in FK-safe order
+        await db.VehicleStatusHistories.Where(x => x.VehicleId == vehicle.Id).ExecuteDeleteAsync();
+        await db.VehiclePriceHistories.Where(x => x.VehicleId == vehicle.Id).ExecuteDeleteAsync();
+        await db.Vehicles.Where(x => x.Id == vehicle.Id).ExecuteDeleteAsync();
+        await db.Models.Where(x => x.Id == model.Id).ExecuteDeleteAsync();
+        await db.Makes.Where(x => x.Id == make.Id).ExecuteDeleteAsync();
+        await db.Branches.Where(x => x.Id == branch.Id).ExecuteDeleteAsync();
     }
 
     [Fact]
@@ -222,40 +224,22 @@ public sealed class PublicCatalogHttpTests(TestFactory factory) : IAsyncLifetime
 
     private static async Task CleanHttpFixturesAsync(DealershipDbContext db)
     {
-        // ExecuteDeleteAsync requires a relational provider; use RemoveRange+SaveChangesAsync for InMemory compatibility.
-        if (db.Database.IsRelational())
+        // TestFactory always uses a PostgreSQL-backed database; ExecuteDeleteAsync is always safe here.
+        var vehicleIds = await db.Vehicles
+            .Where(x => x.Make.Name.StartsWith("Http Make "))
+            .Select(x => x.Id)
+            .ToListAsync();
+        if (vehicleIds.Count > 0)
         {
-            var vehicleIds = await db.Vehicles.Where(x => x.Make.Name.StartsWith("Http Make ")).Select(x => x.Id).ToListAsync();
-            if (vehicleIds.Count > 0)
-            {
-                await db.VehicleStatusHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ExecuteDeleteAsync();
-                await db.VehiclePriceHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ExecuteDeleteAsync();
-                await db.Vehicles.Where(x => vehicleIds.Contains(x.Id)).ExecuteDeleteAsync();
-            }
-            await db.Variants.Where(x => x.Model.Make.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
-            await db.Models.Where(x => x.Make.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
-            await db.Makes.Where(x => x.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
-            await db.Branches.Where(x => x.Name.StartsWith("Http Branch ")).ExecuteDeleteAsync();
-            await db.CustomFieldDefinitions.Where(x => x.Key.StartsWith("httpfilter") || x.Key.StartsWith("httpprivate")).ExecuteDeleteAsync();
-            await db.Users.Where(x => x.Email.StartsWith("http-") && x.Email.EndsWith("@test.local")).ExecuteDeleteAsync();
+            await db.VehicleStatusHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ExecuteDeleteAsync();
+            await db.VehiclePriceHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ExecuteDeleteAsync();
+            await db.Vehicles.Where(x => vehicleIds.Contains(x.Id)).ExecuteDeleteAsync();
         }
-        else
-        {
-            var vehicleIds = await db.Vehicles.Where(x => x.Make.Name.StartsWith("Http Make ")).Select(x => x.Id).ToListAsync();
-            if (vehicleIds.Count > 0)
-            {
-                db.VehicleStatusHistories.RemoveRange(await db.VehicleStatusHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ToListAsync());
-                db.VehiclePriceHistories.RemoveRange(await db.VehiclePriceHistories.Where(x => vehicleIds.Contains(x.VehicleId)).ToListAsync());
-                db.Vehicles.RemoveRange(await db.Vehicles.Where(x => vehicleIds.Contains(x.Id)).ToListAsync());
-                await db.SaveChangesAsync();
-            }
-            db.Variants.RemoveRange(await db.Variants.Where(x => x.Model.Make.Name.StartsWith("Http Make ")).ToListAsync());
-            db.Models.RemoveRange(await db.Models.Where(x => x.Make.Name.StartsWith("Http Make ")).ToListAsync());
-            db.Makes.RemoveRange(await db.Makes.Where(x => x.Name.StartsWith("Http Make ")).ToListAsync());
-            db.Branches.RemoveRange(await db.Branches.Where(x => x.Name.StartsWith("Http Branch ")).ToListAsync());
-            db.CustomFieldDefinitions.RemoveRange(await db.CustomFieldDefinitions.Where(x => x.Key.StartsWith("httpfilter") || x.Key.StartsWith("httpprivate")).ToListAsync());
-            db.Users.RemoveRange(await db.Users.Where(x => x.Email.StartsWith("http-") && x.Email.EndsWith("@test.local")).ToListAsync());
-            await db.SaveChangesAsync();
-        }
+        await db.Variants.Where(x => x.Model.Make.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
+        await db.Models.Where(x => x.Make.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
+        await db.Makes.Where(x => x.Name.StartsWith("Http Make ")).ExecuteDeleteAsync();
+        await db.Branches.Where(x => x.Name.StartsWith("Http Branch ")).ExecuteDeleteAsync();
+        await db.CustomFieldDefinitions.Where(x => x.Key.StartsWith("httpfilter") || x.Key.StartsWith("httpprivate")).ExecuteDeleteAsync();
+        await db.Users.Where(x => x.Email.StartsWith("http-") && x.Email.EndsWith("@test.local")).ExecuteDeleteAsync();
     }
 }

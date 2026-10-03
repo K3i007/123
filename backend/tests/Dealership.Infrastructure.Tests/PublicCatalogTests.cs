@@ -29,6 +29,16 @@ public sealed class PublicCatalogTests
         return (make, model, variant, branch);
     }
 
+    /// <summary>Transitions a vehicle through all required states to reach Published.</summary>
+    private static void PublishVehicle(Vehicle vehicle, Guid userId)
+    {
+        vehicle.TransitionTo(VehicleStatus.InReview,    "Test", userId);
+        vehicle.TransitionTo(VehicleStatus.Photography, "Test", userId);
+        vehicle.TransitionTo(VehicleStatus.Inspection,  "Test", userId, manualOverride: true);
+        vehicle.TransitionTo(VehicleStatus.Approved,    "Test", userId, manualOverride: true);
+        vehicle.TransitionTo(VehicleStatus.Published,   "Test", userId);
+    }
+
     [Fact]
     public async Task Only_Published_Vehicles_Are_Returned_In_Listings()
     {
@@ -125,55 +135,76 @@ public sealed class PublicCatalogTests
     [Fact]
     public async Task Search_By_Keyword_Matches_Correct_Vehicles()
     {
-        await using var db = CreateInMemoryDb();
-        var (makeToyota, modelCorolla, varSe, branch) = CreateBaseEntities(db, "Toyota", "Corolla", "SE");
-        var (makeBmw, model3, varSport, _) = CreateBaseEntities(db, "BMW", "Serie 3", "330i Sport");
+        // ILike (case-insensitive LIKE) is a PostgreSQL function; this test requires a real database.
+        var connectionString = PostgresGuard.Resolve();
+        var options = new DbContextOptionsBuilder<DealershipDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
 
-        var user = new User { Email = "admin@test.local" };
-        db.Users.Add(user);
+        var suffix = Guid.NewGuid().ToString("N");
+        Guid vehicleId1 = Guid.Empty, vehicleId2 = Guid.Empty;
+        Guid makeIdToyota = Guid.Empty, makeIdBmw = Guid.Empty;
 
-        var vehicle1 = new Vehicle { Make = makeToyota, MakeId = makeToyota.Id, Model = modelCorolla, ModelId = modelCorolla.Id, Variant = varSe, VariantId = varSe.Id, Branch = branch, BranchId = branch.Id, Year = 2022, Mileage = 10000, Price = 350000m, CreatedById = user.Id };
-        vehicle1.TransitionTo(VehicleStatus.InReview, "Test", user.Id);
-        vehicle1.TransitionTo(VehicleStatus.Photography, "Test", user.Id);
-        vehicle1.TransitionTo(VehicleStatus.Inspection, "Test", user.Id, manualOverride: true);
-        vehicle1.TransitionTo(VehicleStatus.Approved, "Test", user.Id, manualOverride: true);
-        vehicle1.TransitionTo(VehicleStatus.Published, "Test", user.Id);
-
-        var vehicle2 = new Vehicle { Make = makeBmw, MakeId = makeBmw.Id, Model = model3, ModelId = model3.Id, Variant = varSport, VariantId = varSport.Id, Branch = branch, BranchId = branch.Id, Year = 2023, Mileage = 5000, Price = 750000m, CreatedById = user.Id };
-        vehicle2.TransitionTo(VehicleStatus.InReview, "Test", user.Id);
-        vehicle2.TransitionTo(VehicleStatus.Photography, "Test", user.Id);
-        vehicle2.TransitionTo(VehicleStatus.Inspection, "Test", user.Id, manualOverride: true);
-        vehicle2.TransitionTo(VehicleStatus.Approved, "Test", user.Id, manualOverride: true);
-        vehicle2.TransitionTo(VehicleStatus.Published, "Test", user.Id);
-
-        db.Vehicles.AddRange(vehicle1, vehicle2);
-        await db.SaveChangesAsync();
-
-        var controller = new PublicController(db)
+        await using (var db = new DealershipDbContext(options))
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
-        };
+            var (makeToyota, modelCorolla, varSe, branch) = CreateBaseEntities(db, $"SearchKwToyota{suffix}", "Corolla", "SE");
+            var (makeBmw, model3, varSport, _)            = CreateBaseEntities(db, $"SearchKwBMW{suffix}", "Serie 3", "330i Sport");
 
-        // Case-insensitive match on make "bmw"
-        var bmwResult = await controller.GetVehicles(new PublicVehicleQuery(Q: "bmw"), CancellationToken.None);
-        var bmwOk = Assert.IsType<OkObjectResult>(bmwResult.Result);
-        var bmwPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(bmwOk.Value);
-        Assert.Equal(1, bmwPaged.Total);
-        Assert.Equal("BMW", bmwPaged.Items.First().Make);
+            var user = new User { Email = $"search-kw-{suffix}@test.invalid" };
+            db.Users.Add(user);
 
-        // Case-insensitive match on make "BMW"
-        var bmwUpperResult = await controller.GetVehicles(new PublicVehicleQuery(Q: "BMW"), CancellationToken.None);
-        var bmwUpperOk = Assert.IsType<OkObjectResult>(bmwUpperResult.Result);
-        var bmwUpperPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(bmwUpperOk.Value);
-        Assert.Equal(1, bmwUpperPaged.Total);
-        Assert.Equal("BMW", bmwUpperPaged.Items.First().Make);
+            var vehicle1 = new Vehicle { Make = makeToyota, MakeId = makeToyota.Id, Model = modelCorolla, ModelId = modelCorolla.Id, Variant = varSe, VariantId = varSe.Id, Branch = branch, BranchId = branch.Id, Year = 2022, Mileage = 10_000, Price = 350_000m, CreatedById = user.Id, CustomFields = "{}" };
+            PublishVehicle(vehicle1, user.Id);
 
-        // Partial match on model "corol"
-        var corolResult = await controller.GetVehicles(new PublicVehicleQuery(Q: "corol"), CancellationToken.None);
-        var corolOk = Assert.IsType<OkObjectResult>(corolResult.Result);
-        var corolPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(corolOk.Value);
-        Assert.Equal(1, corolPaged.Total);
-        Assert.Equal("Corolla", corolPaged.Items.First().Model);
+            var vehicle2 = new Vehicle { Make = makeBmw, MakeId = makeBmw.Id, Model = model3, ModelId = model3.Id, Variant = varSport, VariantId = varSport.Id, Branch = branch, BranchId = branch.Id, Year = 2023, Mileage = 5_000, Price = 750_000m, CreatedById = user.Id, CustomFields = "{}" };
+            PublishVehicle(vehicle2, user.Id);
+
+            db.Vehicles.AddRange(vehicle1, vehicle2);
+            await db.SaveChangesAsync();
+            vehicleId1 = vehicle1.Id; vehicleId2 = vehicle2.Id;
+            makeIdToyota = makeToyota.Id; makeIdBmw = makeBmw.Id;
+        }
+
+        try
+        {
+            await using var db = new DealershipDbContext(options);
+            var controller = new PublicController(db)
+            {
+                ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+            };
+
+            // Case-insensitive match on make "SearchKwBMW..."
+            var bmwResult = await controller.GetVehicles(new PublicVehicleQuery(Q: $"SearchKwBMW{suffix}"), CancellationToken.None);
+            var bmwOk = Assert.IsType<OkObjectResult>(bmwResult.Result);
+            var bmwPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(bmwOk.Value);
+            Assert.Equal(1, bmwPaged.Total);
+            Assert.Contains("BMW", bmwPaged.Items.First().Make);
+
+            // Case-insensitive match (lowercase suffix)
+            var lcResult = await controller.GetVehicles(new PublicVehicleQuery(Q: $"searchkwbmw{suffix}"), CancellationToken.None);
+            var lcOk = Assert.IsType<OkObjectResult>(lcResult.Result);
+            var lcPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(lcOk.Value);
+            Assert.Equal(1, lcPaged.Total);
+
+            // Partial match on model "Corol"
+            var corolResult = await controller.GetVehicles(new PublicVehicleQuery(Q: "Corol"), CancellationToken.None);
+            var corolOk = Assert.IsType<OkObjectResult>(corolResult.Result);
+            var corolPaged = Assert.IsType<PublicPagedResult<PublicVehicleListItemDto>>(corolOk.Value);
+            Assert.True(corolPaged.Total >= 1);
+            Assert.Contains(corolPaged.Items, i => i.Model == "Corolla");
+        }
+        finally
+        {
+            await using var cleanup = new DealershipDbContext(options);
+            await cleanup.VehicleStatusHistories.Where(x => x.VehicleId == vehicleId1 || x.VehicleId == vehicleId2).ExecuteDeleteAsync();
+            await cleanup.VehiclePriceHistories.Where(x => x.VehicleId == vehicleId1 || x.VehicleId == vehicleId2).ExecuteDeleteAsync();
+            await cleanup.Vehicles.Where(x => x.Id == vehicleId1 || x.Id == vehicleId2).ExecuteDeleteAsync();
+            await cleanup.Variants.Where(x => x.Model.Make.Id == makeIdToyota || x.Model.Make.Id == makeIdBmw).ExecuteDeleteAsync();
+            await cleanup.Models.Where(x => x.Make.Id == makeIdToyota || x.Make.Id == makeIdBmw).ExecuteDeleteAsync();
+            await cleanup.Makes.Where(x => x.Id == makeIdToyota || x.Id == makeIdBmw).ExecuteDeleteAsync();
+            await cleanup.Branches.Where(x => x.Name.StartsWith("Sucursal ")).ExecuteDeleteAsync();
+            await cleanup.Users.Where(x => x.Email == $"search-kw-{suffix}@test.invalid").ExecuteDeleteAsync();
+        }
     }
 
     [Fact]
